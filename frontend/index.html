@@ -1,0 +1,53 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Scraper</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+
+<main class="container">
+    <header>
+        <h1>Media Scraper</h1>
+        <p>Consulta y análisis de perfiles públicos de TikTok</p>
+    </header>
+
+    <section class="search-section">
+        <form id="searchForm">
+            <label for="username">TikTok Username</label>
+
+            <div class="search-box">
+                <input
+                        type="text"
+                        id="username"
+                        placeholder="@username"
+                        required
+                >
+                <button type="submit" id="searchButton">
+                    Buscar perfil
+                </button>
+            </div>
+        </form>
+
+        <p id="statusMessage" role="status"></p>
+    </section>
+</main>
+
+<!-- Profile results modal -->
+<dialog id="profileModal">
+    <div class="modal-header">
+        <h2>Información del perfil</h2>
+        <button id="closeModal" type="button" aria-label="Cerrar">
+            &times;
+        </button>
+    </div>
+
+    <div id="profileContent"></div>
+</dialog>
+
+</body>
+</html>
