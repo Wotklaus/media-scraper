@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Media Scraper | Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js" defer></script>
+</head>
+<body>
+<div class="app">
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-icon">M</div>
+            <div>
+                <h1>Media Scraper</h1>
+                <p>Social Media Analytics</p>
+            </div>
+        </div>
+
+        <!-- Social platform indicators -->
+        <div class="social-icons">
+            <span class="social tik" title="TikTok">♪</span>
+            <span class="social instagram" title="Instagram">◎</span>
+            <span class="social youtube" title="YouTube">▶</span>
+            <span class="social facebook" title="Facebook">f</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="welcome">
+            <h2>Panel de análisis</h2>
+            <p>Explora información pública de perfiles de TikTok.</p>
+        </section>
+
+        <section class="search-panel">
+            <form id="searchForm">
+                <label for="username">Nombre de usuario</label>
+                <div class="search-box">
+                    <span class="at-symbol">@</span>
+                    <input
+                            id="username"
+                            type="text"
+                            placeholder="Ingresa un username"
+                            autocomplete="off"
+                            required
+                    >
+                    <button id="searchButton" type="submit">
+                        Analizar perfil
+                    </button>
+                </div>
+            </form>
+            <p id="statusMessage" role="status"></p>
+        </section>
+
+        <!-- Dashboard results -->
+        <section id="dashboard" class="dashboard hidden">
+            <article class="card profile-card">
+                <div class="profile-photo">
+                    <img id="profileAvatar" alt="Foto de perfil">
+                    <span id="avatarFallback">?</span>
+                </div>
+
+                <h3 id="profileName">Nombre del perfil</h3>
+                <p id="profileUsername">@username</p>
+
+                <div class="section-divider"></div>
+
+                <h4>Biografía</h4>
+                <p id="profileBio" class="biography"></p>
+
+                <a
+                        id="profileLink"
+                        class="profile-link"
+                        href="#"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                >
+                    Ver perfil en TikTok ↗
+                </a>
+            </article>
+
+            <div class="right-column">
+                <article class="card statistics-card">
+                    <div class="card-heading">
+                        <div>
+                            <h3>Estadísticas del perfil</h3>
+                            <p>Información general de la cuenta</p>
+                        </div>
+                        <span class="tag">TikTok</span>
+                    </div>
+
+                    <!-- Interactive statistic cards -->
+                    <div class="stats-grid">
+                        <button class="stat-item" data-field="followers">
+                            <span class="stat-icon">♧</span>
+                            <span class="stat-label">Seguidores</span>
+                            <strong id="followers">—</strong>
+                            <span class="detail-hint">Ver detalles ↗</span>
+                        </button>
+
+                        <button class="stat-item" data-field="following">
+                            <span class="stat-icon">♙</span>
+                            <span class="stat-label">Seguidos</span>
+                            <strong id="following">—</strong>
+                            <span class="detail-hint">Ver detalles ↗</span>
+                        </button>
+
+                        <button class="stat-item" data-field="likes">
+                            <span class="stat-icon">♡</span>
+                            <span class="stat-label">Me gusta</span>
+                            <strong id="likes">—</strong>
+                            <span class="detail-hint">Ver detalles ↗</span>
+                        </button>
+                    </div>
+                </article>
+
+                <article class="card videos-card">
+                    <div class="card-heading">
+                        <div>
+                            <h3>Últimos 10 videos</h3>
+                            <p>Publicaciones recientes del perfil</p>
+                        </div>
+                        <span class="tag">0 / 10</span>
+                    </div>
+
+                    <!-- Video results will be added here -->
+                    <div id="videosGrid" class="videos-grid"></div>
+                    <p id="videosMessage" class="empty-message">
+                        El módulo de publicaciones está en desarrollo.
+                    </p>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        Media Scraper · Academic Project
+    </footer>
+</div>
+
+<!-- Statistic details modal -->
+<dialog id="detailsModal">
+    <div class="modal-header">
+        <h3 id="detailsTitle">Detalles</h3>
+        <button id="closeDetails" aria-label="Cerrar">×</button>
+    </div>
+    <p id="detailsContent"></p>
+</dialog>
+</body>
+</html>
