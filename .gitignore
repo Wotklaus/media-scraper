@@ -221,3 +221,10 @@ __marimo__/
 
 # IntelliJ IDEA
 .idea/
+
+# Private browser state and authorized demo captures.
+.media-scraper/
+playwright/.auth/
+storage_state*.json
+cookies*.json
+*.har

@@ -1,13 +1,15 @@
 
 import json
+import logging
 import re
 from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import (
-    sync_playwright,
     Error as PlaywrightError,
     TimeoutError as PlaywrightTimeoutError,
 )
+
+from .session import persistent_context
 
 PROFILE_FIELDS = {
     "nickname": '[data-e2e="user-title"]',
@@ -106,65 +108,94 @@ def get_avatar_url(page):
     return None
 
 
+class TikTokPageError(RuntimeError):
+    """The requested TikTok content is not accessible on this page."""
+
+
+def validate_content_page(page):
+    """Reject known access screens without treating ordinary login buttons as gates."""
+    path = urlparse(page.url).path.lower()
+    if re.search(r"/(login|signup)(/|$)", path):
+        raise TikTokPageError("TikTok solicita iniciar sesión o la sesión venció. Ejecuta: .venv/bin/python -m backend.manage session")
+    if re.search(r"/(captcha|verify|challenge)(/|$)", path):
+        raise TikTokPageError("TikTok solicita verificación (CAPTCHA). Ejecuta la configuración de sesión y comprueba manualmente el acceso.")
+
+    screens = {
+        "verification": (
+            '[id*="captcha"], [class*="captcha"], '
+            'iframe[src*="captcha"], iframe[src*="verify"]'
+        ),
+        "login": '[data-e2e="login-modal"], [data-e2e="login-dialog"]',
+        "unavailable content": (
+            '[data-e2e="video-unavailable"], [data-e2e="user-not-found"], '
+            '[data-e2e="error-page"]'
+        ),
+    }
+    for reason, selector in screens.items():
+        for element in page.locator(selector).all():
+            if element.is_visible():
+                messages = {
+                    "verification": "TikTok solicita verificación (CAPTCHA). Abre la configuración de sesión para comprobar el acceso manualmente.",
+                    "login": "TikTok solicita login o la sesión venció. Ejecuta: .venv/bin/python -m backend.manage session",
+                    "unavailable content": "El contenido solicitado no está disponible en TikTok.",
+                }
+                raise TikTokPageError(messages[reason])
+
+    # Exact messages avoid matching descriptions, comments or navigation labels.
+    for message in (
+        "Video currently unavailable", "This video is unavailable",
+        "Couldn't find this account", "Account not found",
+        "Video no disponible", "No se pudo encontrar esta cuenta",
+    ):
+        for element in page.get_by_text(message, exact=True).all():
+            if element.is_visible():
+                raise TikTokPageError("El contenido solicitado no está disponible en TikTok.")
+
+
 def get_embedded_json(page):
-    selectors = [
-        "script#__UNIVERSAL_DATA_FOR_REHYDRATION__",
-        "script#SIGI_STATE",
-        "script#__NEXT_DATA__",
-    ]
+    """Read every available supported hydration block, including duplicates."""
+    selector = (
+        "script#__UNIVERSAL_DATA_FOR_REHYDRATION__, "
+        "script#SIGI_STATE, script#__NEXT_DATA__"
+    )
+    try:
+        page.locator(selector).first.wait_for(state="attached", timeout=5000)
+    except PlaywrightTimeoutError:
+        return []
 
-    for selector in selectors:
+    payloads = []
+    for script in page.locator(selector).all():
         try:
-            content = page.locator(selector).first.text_content(
-                timeout=3000
-            )
-
+            content = script.text_content(timeout=3000)
             if content:
-                return json.loads(content)
-
+                payloads.append(json.loads(content))
         except (PlaywrightTimeoutError, ValueError):
             continue
+    return payloads
 
-    return None
 
-
-def find_video_payload(data):
+def find_video_payload(data, video_id):
+    """Find metrics belonging to the requested video, never a recommendation."""
     if isinstance(data, dict):
-        item = data.get("itemStruct")
-
-        if isinstance(item, dict):
-            stats = item.get("stats")
-
-            if isinstance(stats, dict):
-                return item
-
         stats = data.get("stats")
-
-        if isinstance(stats, dict) and any(
-                key in stats
-                for key in (
-                        "playCount",
-                        "diggCount",
-                        "commentCount",
-                        "shareCount",
-                        "collectCount",
-                )
+        if (
+            str(data.get("id", "")) == str(video_id)
+            and isinstance(stats, dict)
+            and any(key in stats for key in (
+                "playCount", "diggCount", "commentCount", "shareCount",
+                "collectCount",
+            ))
         ):
             return data
-
         for value in data.values():
-            result = find_video_payload(value)
-
-            if result:
+            result = find_video_payload(value, video_id)
+            if result is not None:
                 return result
-
     elif isinstance(data, list):
-        for item in data:
-            result = find_video_payload(item)
-
-            if result:
+        for value in data:
+            result = find_video_payload(value, video_id)
+            if result is not None:
                 return result
-
     return None
 
 
@@ -279,13 +310,13 @@ def extract_user_list(page, list_type, limit=10):
             dialog = find_user_dialog(page)
 
             if dialog is None:
-                print(f"{list_type}: No public user list found.")
+                logging.getLogger(__name__).debug(f"{list_type}: No public user list found.")
                 page.keyboard.press("Escape")
                 return []
 
             usernames = read_usernames(dialog, limit=limit)
 
-            print(f"{list_type}: {len(usernames)} usernames found.")
+            logging.getLogger(__name__).debug(f"{list_type}: {len(usernames)} usernames found.")
 
             page.keyboard.press("Escape")
 
@@ -297,7 +328,7 @@ def extract_user_list(page, list_type, limit=10):
             except PlaywrightError:
                 pass
 
-    print(f"{list_type}: User list unavailable.")
+    logging.getLogger(__name__).debug(f"{list_type}: User list unavailable.")
     return []
 
 
@@ -459,8 +490,18 @@ def extract_video_comments(page, limit=10):
 
 # Extract video metrics and available public comments.
 def extract_video_details(page, video_url, fallback_preview=None):
+    validate_content_page(page)
+    match = re.fullmatch(r"/@[^/]+/video/(\d+)/?", urlparse(video_url).path)
+    if not match:
+        raise TikTokPageError("Invalid TikTok video URL.")
     payload = get_embedded_json(page)
-    item = find_video_payload(payload) if payload else None
+    validate_content_page(page)
+    item = find_video_payload(payload, match.group(1))
+    if item is None:
+        logging.getLogger(__name__).debug(
+            f"Video {match.group(1)}: requested metrics are missing; "
+            "no unrelated video metrics will be used."
+        )
 
     result = {
         "url": video_url,
@@ -507,7 +548,7 @@ def extract_video_details(page, video_url, fallback_preview=None):
 
 
 # Open each video and read available details.
-def extract_latest_videos(context, video_cards):
+def extract_latest_videos(context, video_cards, warnings=None):
     results = []
 
     for number, card in enumerate(video_cards, start=1):
@@ -533,6 +574,8 @@ def extract_latest_videos(context, video_cards):
                 timeout=30000,
             )
 
+            validate_content_page(video_page)
+
             if response and response.status == 200:
                 details = extract_video_details(
                     video_page,
@@ -542,13 +585,21 @@ def extract_latest_videos(context, video_cards):
 
                 result.update(details)
 
-            print(
+            else:
+                raise TikTokPageError(
+                    f"Unable to access video (HTTP {response.status if response else 'no response'})."
+                )
+
+            logging.getLogger(__name__).debug(
                 f"Video {number}: "
                 f"{len(result['comments_list'])} comments found."
             )
 
-        except PlaywrightError as error:
-            print(f"Video {number}: {error}")
+        except (PlaywrightError, TikTokPageError) as error:
+            message = str(error) if isinstance(error, TikTokPageError) else "Falló la carga del video en TikTok."
+            if warnings is not None:
+                warnings.append(f"Video {number}: {message}")
+            logging.getLogger(__name__).debug(f"Video {number}: {message}")
 
         finally:
             video_page.close()
@@ -563,86 +614,84 @@ def scrape_profile(username):
     username = validate_username(username)
     url = f"https://www.tiktok.com/@{username}"
 
-    try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=False
+    with persistent_context(headless=True) as context:
+        page = context.new_page()
+
+        response = page.goto(
+            url,
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+
+        validate_content_page(page)
+
+        if response is None or response.status != 200:
+            raise RuntimeError(
+                "TikTok no permitió cargar el perfil. Comprueba el username, la conexión y el acceso a la cuenta."
             )
 
-            try:
-                context = browser.new_context()
-                page = context.new_page()
+        try:
+            page.locator(
+                PROFILE_FIELDS["nickname"]
+            ).first.wait_for(
+                state="visible",
+                timeout=15000,
+            )
 
-                response = page.goto(
-                    url,
-                    wait_until="domcontentloaded",
-                    timeout=30000,
-                )
+        except PlaywrightTimeoutError:
+            validate_content_page(page)
+            raise TikTokPageError("No se pudo validar la carga del perfil. Comprueba el acceso desde la configuración de sesión.")
 
-                if response is None or response.status != 200:
-                    raise RuntimeError(
-                        "Unable to access the TikTok profile."
-                    )
+        validate_content_page(page)
+        profile = extract_profile_data(
+            page,
+            username,
+        )
 
-                try:
-                    page.locator(
-                        PROFILE_FIELDS["nickname"]
-                    ).first.wait_for(
-                        state="visible",
-                        timeout=15000,
-                    )
+        # Read public profile user lists.
+        profile["followers_users"] = extract_user_list(
+            page,
+            "followers",
+            limit=10,
+        )
 
-                except PlaywrightTimeoutError:
-                    pass
+        profile["following_users"] = extract_user_list(
+            page,
+            "following",
+            limit=10,
+        )
 
-                profile = extract_profile_data(
-                    page,
-                    username,
-                )
+        # Wait for public video links.
+        try:
+            page.locator(
+                VIDEO_LINK_SELECTOR
+            ).first.wait_for(
+                state="attached",
+                timeout=20000,
+            )
 
-                # Read public profile user lists.
-                profile["followers_users"] = extract_user_list(
-                    page,
-                    "followers",
-                    limit=10,
-                )
+        except PlaywrightTimeoutError:
+            logging.getLogger(__name__).debug("Video links unavailable.")
 
-                profile["following_users"] = extract_user_list(
-                    page,
-                    "following",
-                    limit=10,
-                )
+        video_cards = get_profile_video_cards(
+            page,
+            limit=10,
+        )
 
-                # Wait for public video links.
-                try:
-                    page.locator(
-                        VIDEO_LINK_SELECTOR
-                    ).first.wait_for(
-                        state="attached",
-                        timeout=20000,
-                    )
+        logging.getLogger(__name__).debug(
+            f"Video cards found: {len(video_cards)}"
+        )
 
-                except PlaywrightTimeoutError:
-                    print("Video links unavailable.")
+        warnings = []
+        profile["videos"] = extract_latest_videos(
+            context,
+            video_cards,
+            warnings=warnings,
+        )
+        if any(video["views"] == "N/A" for video in profile["videos"]):
+            warnings.append("Algunos videos no tienen estadísticas disponibles; no se sustituyeron con otros videos.")
+        if not video_cards:
+            warnings.append("No se pudieron cargar videos públicos. El perfil puede estar vacío o restringido.")
+        profile["_meta"] = {"mode": "real", "warnings": warnings}
 
-                video_cards = get_profile_video_cards(
-                    page,
-                    limit=10,
-                )
-
-                print(
-                    f"Video cards found: {len(video_cards)}"
-                )
-
-                profile["videos"] = extract_latest_videos(
-                    context,
-                    video_cards,
-                )
-
-                return profile
-
-            finally:
-                browser.close()
-
-    except PlaywrightError as error:
-        raise RuntimeError(str(error)) from error
+        return profile

@@ -595,3 +595,34 @@ footer {
         font-size: 12px;
     }
 }
+
+.profile-column {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.export-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.export-button {
+    padding: 8px 10px;
+    border: 1px solid #dae1eb;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #526172;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.export-button:hover:not(:disabled) {
+    background: #eff3f8;
+}
+
+.export-button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+}
