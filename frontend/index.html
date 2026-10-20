@@ -36,6 +36,11 @@
 
         <section class="search-panel">
             <form id="searchForm">
+                <label for="queryMode">Origen de los datos</label>
+                <select id="queryMode" name="mode">
+                    <option value="real">Consulta real · TikTok en segundo plano</option>
+                    <option value="demo">Demostración · captura guardada</option>
+                </select>
                 <label for="username">Nombre de usuario</label>
                 <div class="search-box">
                     <span class="at-symbol">@</span>
@@ -56,6 +61,7 @@
 
         <!-- Dashboard results -->
         <section id="dashboard" class="dashboard hidden">
+            <p id="dataSource" role="status"></p>
             <article class="card profile-card">
                 <div class="profile-photo">
                     <img id="profileAvatar" alt="Foto de perfil">

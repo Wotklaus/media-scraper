@@ -4,6 +4,8 @@ const API_URL = "";
 const form = document.getElementById("searchForm");
 const searchButton = document.getElementById("searchButton");
 const statusMessage = document.getElementById("statusMessage");
+const queryMode = document.getElementById("queryMode");
+const dataSource = document.getElementById("dataSource");
 const dashboard = document.getElementById("dashboard");
 const avatar = document.getElementById("profileAvatar");
 const avatarFallback = document.getElementById("avatarFallback");
@@ -186,6 +188,13 @@ function displayVideos(videos) {
 
 // Display profile details.
 function displayProfile(profile) {
+    const metadata = profile._meta || {};
+    dataSource.textContent = metadata.mode === "demo"
+        ? `DEMOSTRACIÓN · Captura de una consulta real: ${metadata.captured_at}`
+        : "CONSULTA REAL · Datos consultados ahora en TikTok";
+    if (metadata.warnings?.length) {
+        dataSource.textContent += ` · ${metadata.warnings.join(" ")}`;
+    }
     setText("profileName", profile.nickname);
     setText("profileUsername", `@${profile.username}`);
     setText("profileBio", profile.bio);
@@ -205,13 +214,13 @@ function displayProfile(profile) {
 }
 
 // Request data from FastAPI.
-async function fetchProfile(username) {
+async function fetchProfile(username, mode) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120000);
+    const timeout = setTimeout(() => controller.abort(), 600000);
 
     try {
         const response = await fetch(
-            `${API_URL}/api/profile/${encodeURIComponent(username)}`,
+            `${API_URL}/api/profile/${encodeURIComponent(username)}?mode=${encodeURIComponent(mode)}`,
             { signal: controller.signal }
         );
 
@@ -244,22 +253,29 @@ form.addEventListener("submit", async (event) => {
     }
 
     searchButton.disabled = true;
+    queryMode.disabled = true;
     dashboard.classList.add("hidden");
-    statusMessage.textContent = "Consultando perfil y publicaciones...";
+    const mode = queryMode.value;
+    statusMessage.textContent = mode === "demo"
+        ? "Cargando captura guardada..."
+        : "Consultando TikTok en segundo plano. Puede tardar varios minutos...";
 
     try {
-        const profile = await fetchProfile(username);
+        const profile = await fetchProfile(username, mode);
         displayProfile(profile);
-        statusMessage.textContent = "Consulta completada.";
+        statusMessage.textContent = mode === "demo"
+            ? "Demostración cargada desde una captura guardada."
+            : "Consulta real completada. Revisa los avisos si faltan datos.";
 
     } catch (error) {
         statusMessage.textContent =
             error.name === "AbortError"
-                ? "La consulta excedió los 120 segundos."
+                ? "La consulta excedió los 10 minutos. El proceso puede seguir terminando; espera antes de reintentar."
                 : error.message;
 
     } finally {
         searchButton.disabled = false;
+        queryMode.disabled = false;
     }
 });
 

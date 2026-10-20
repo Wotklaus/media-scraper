@@ -180,6 +180,26 @@ button {
 }
 
 /* Dashboard */
+#queryMode {
+    max-width: 100%;
+    padding: 10px;
+    margin-bottom: 18px;
+    border: 1px solid #e1e6ed;
+    border-radius: 10px;
+    background: white;
+    color: #263247;
+}
+
+#dataSource {
+    grid-column: 1 / -1;
+    padding: 14px;
+    margin: 0;
+    border: 1px solid #dae1eb;
+    border-radius: 10px;
+    background: #eff3f8;
+    overflow-wrap: anywhere;
+}
+
 .dashboard {
     display: grid;
     grid-template-columns: minmax(260px, 350px) minmax(0, 1fr);
