@@ -142,7 +142,7 @@ class DownloadTests(unittest.TestCase):
                 self.assertTrue(page.locator('#downloadCSV').is_disabled())
                 for current in (profile, empty):
                     page.locator('#username').fill(current['username'])
-                    page.get_by_role('button', name='Analizar perfil', exact=True).click()
+                    page.get_by_role('button', name='Analizar', exact=True).click()
                     page.wait_for_function("!document.getElementById('searchButton').disabled")
                     self.assertEqual(page.locator('#statusMessage').inner_text(), '')
                     self.assertNotIn('CONSULTA REAL', page.locator('body').inner_text())
