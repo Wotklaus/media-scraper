@@ -196,7 +196,7 @@ class RealFlowTests(unittest.TestCase):
             self.assertEqual(kwargs, {'headless': True})
             yield context
         cards = [{'id': v['id'], 'url': v['url']} for v in profile['videos']]
-        with patch.object(scraper, 'persistent_context', persistent), patch.object(scraper, 'validate_content_page'), patch.object(scraper, 'extract_profile_data', return_value={k: v for k, v in profile.items() if k != 'cookies'}), patch.object(scraper, 'extract_user_list', return_value=[]), patch.object(scraper, 'get_profile_video_cards', return_value=cards), patch.object(scraper, 'extract_latest_videos', return_value=profile['videos']) as videos:
+        with patch.object(scraper, 'persistent_context', persistent), patch.object(scraper, 'validate_content_page'), patch.object(scraper, 'extract_profile_data', return_value={k: v for k, v in profile.items() if k != 'cookies'}), patch.object(scraper, 'extract_user_list', return_value=[]), patch.object(scraper, 'get_embedded_json', return_value=[]), patch.object(scraper, 'get_profile_video_cards', return_value=cards), patch.object(scraper, 'extract_latest_videos', return_value=profile['videos']) as videos:
             result = scraper.scrape_profile('test_only')
         self.assertEqual(len(result['videos']), 10)
         self.assertEqual(result['_meta']['mode'], 'real')

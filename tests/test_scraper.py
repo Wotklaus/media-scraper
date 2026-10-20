@@ -9,6 +9,7 @@ URL = 'https://www.tiktok.com/@example/video/222'
 
 def video(video_id='222', **stats):
     return {'id': video_id, 'desc': 'Requested video',
+            'author': {'uniqueId': 'example', 'id': '42', 'secUid': 'public-example'},
             'stats': stats or {'playCount': 2000}, 'video': {'cover': 'cover.jpg'}}
 
 
@@ -98,8 +99,8 @@ class ExtractionTests(unittest.TestCase):
     def test_metrics_and_response_fields_are_preserved(self, embedded, comments):
         embedded.return_value = [video('111', playCount=999999), video(
             playCount=2000, diggCount=0, commentCount=3, shareCount=4, collectCount=5)]
-        result = scraper.extract_video_details(content_page(), URL)
-        self.assertEqual(set(result), {'url', 'preview_url', 'title', 'views', 'likes',
+        result = scraper.extract_video_details(content_page(), URL, expected_author={'uniqueId': 'example', 'id': '42'})
+        self.assertEqual(set(result), {'url', 'type', 'preview_url', 'title', 'views', 'likes',
                                       'comments', 'shares', 'saves', 'comments_list'})
         self.assertEqual([result[k] for k in ('views', 'likes', 'comments', 'shares', 'saves')],
                          ['2.0K', '0', '3', '4', '5'])
@@ -107,22 +108,20 @@ class ExtractionTests(unittest.TestCase):
 
     @patch.object(scraper, 'extract_video_comments', return_value=[{'username': 'reader', 'text': 'Hi'}])
     @patch.object(scraper, 'get_embedded_json', return_value=[video('111')])
-    def test_missing_metrics_preserves_comments_without_using_recommendations(self, embedded, comments):
-        with patch.object(scraper.logging.getLogger(scraper.__name__), 'debug') as diagnostic:
-            result = scraper.extract_video_details(content_page(), URL)
-        self.assertEqual(result['views'], 'N/A')
-        self.assertEqual(result['comments_list'], comments.return_value)
-        self.assertIn('requested metrics are missing', diagnostic.call_args.args[0])
+    def test_missing_requested_publication_is_rejected_without_reading_comments(self, embedded, comments):
+        with self.assertRaisesRegex(scraper.TikTokPageError, 'no verificable'):
+            scraper.extract_video_details(content_page(), URL, expected_author={'uniqueId': 'example'})
+        comments.assert_not_called()
 
-    def test_blocked_video_preserves_card_fields_and_closes_page(self):
+    def test_blocked_video_is_discarded_and_page_closed(self):
         page = content_page('https://www.tiktok.com/login')
         page.goto.return_value = Mock(status=200)
         context = Mock(new_page=Mock(return_value=page))
-        result = scraper.extract_latest_videos(context, [{'id': '222', 'url': URL}])
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0]['id'], '222')
-        self.assertEqual(result[0]['views'], 'N/A')
-        self.assertEqual(result[0]['comments_list'], [])
+        warnings = []
+        result = scraper.extract_latest_videos(context, [{'id': '222', 'url': URL}], warnings,
+                                              expected_author={'uniqueId': 'example'})
+        self.assertEqual(result, [])
+        self.assertIn('descartada', warnings[0])
         page.close.assert_called_once()
 
 
