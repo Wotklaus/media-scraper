@@ -2,6 +2,7 @@
 import json
 import logging
 import re
+from time import time
 from urllib.parse import urljoin, urlparse
 
 from playwright.sync_api import (
@@ -24,7 +25,12 @@ AVATAR_SELECTOR = (
     'img[data-e2e="user-avatar"]'
 )
 
-VIDEO_LINK_SELECTOR = 'a[href*="/video/"]'
+PROFILE_GRID_SELECTOR = '[data-e2e="user-post-item-list"]'
+VIDEO_LINK_SELECTOR = ", ".join(
+    f'{PROFILE_GRID_SELECTOR} {anchor}[href*="/{kind}/"]'
+    for anchor in ('[data-e2e="user-post-item"] a', 'a[data-e2e="user-post-item"]')
+    for kind in ("video", "photo")
+)
 
 USER_LIST_SELECTORS = {
     "followers": [
@@ -333,9 +339,13 @@ def extract_user_list(page, list_type, limit=10):
 
 
 # Collect up to 10 public video links.
-def get_profile_video_cards(page, limit=10):
+def get_profile_video_cards(page, limit=10, username=None, expected_author=None, warnings=None):
     videos = []
     seen = set()
+    if expected_author is None:
+        expected_author = {"uniqueId": username or username_from_href(page.url)}
+    allowed_authors = {str(value).casefold() for value in expected_author.values() if value}
+    validate_content_page(page)
 
     try:
         page.locator(VIDEO_LINK_SELECTOR).first.wait_for(
@@ -344,11 +354,15 @@ def get_profile_video_cards(page, limit=10):
         )
 
     except PlaywrightTimeoutError:
+        validate_content_page(page)
+        if warnings is not None:
+            warnings.append("TikTok no entregó enlaces /video/ o /photo/ en las tarjetas de la cuadrícula; no se usaron recomendaciones.")
         return videos
 
+    validate_content_page(page)
     locator = page.locator(VIDEO_LINK_SELECTOR)
 
-    for index in range(min(locator.count(), 40)):
+    for index in range(locator.count()):
         item = locator.nth(index)
         href = item.get_attribute("href")
 
@@ -364,12 +378,16 @@ def get_profile_video_cards(page, limit=10):
         }:
             continue
 
-        match = re.search(r"/video/(\d+)", parsed.path)
+        match = re.fullmatch(r"/@([^/]+)/(video|photo)/(\d+)/?", parsed.path)
 
-        if not match:
+        if parsed.scheme != "https" or not match:
+            continue
+        if match.group(1).casefold() not in allowed_authors:
+            if warnings is not None:
+                warnings.append(f"Publicación {match.group(3)} descartada: el enlace no corresponde al usuario solicitado ni a sus identificadores confirmados.")
             continue
 
-        video_id = match.group(1)
+        video_id = match.group(3)
 
         if video_id in seen:
             continue
@@ -389,12 +407,13 @@ def get_profile_video_cards(page, limit=10):
         videos.append(
             {
                 "id": video_id,
-                "url": url.split("?")[0],
+                "type": match.group(2),
+                "url": url,
                 "preview_url": preview_url,
             }
         )
 
-        if len(videos) >= limit:
+        if limit is not None and len(videos) >= limit:
             break
 
     return videos
@@ -488,23 +507,108 @@ def extract_video_comments(page, limit=10):
     return comments
 
 
+def author_fields(user):
+    if not isinstance(user, dict):
+        return {}
+    return {key: str(value).casefold() if key == "uniqueId" else str(value)
+            for key in ("uniqueId", "id", "secUid")
+            if isinstance(value := user.get(key), (str, int)) and not isinstance(value, bool) and str(value)}
+
+
+def users_in(payload):
+    module = payload.get("UserModule") if isinstance(payload, dict) else None
+    users = module.get("users") if isinstance(module, dict) else None
+    return users if isinstance(users, dict) else {}
+
+
+def profile_author(payloads, username):
+    expected = {"uniqueId": username.casefold()}
+    for payload in payloads:
+        user = payload
+        for key in ("__DEFAULT_SCOPE__", "webapp.user-detail", "userInfo", "user"):
+            user = user.get(key) if isinstance(user, dict) else None
+        identities = [author_fields(user)] + [author_fields(user) for user in users_in(payload).values()
+                                            if author_fields(user).get("uniqueId") == username.casefold()]
+        for identity in identities:
+            if identity and identity.get("uniqueId") != username.casefold():
+                return {}
+            for key, value in identity.items():
+                if key in expected and expected[key] != value:
+                    return {}
+                expected[key] = value
+    return expected
+
+
+def publication_records(data, publication_id):
+    if isinstance(data, dict):
+        if str(data.get("id", "")) == str(publication_id) and any(
+            key in data for key in ("stats", "author", "authorId", "video", "imagePost")
+        ):
+            yield data
+        for value in data.values():
+            yield from publication_records(value, publication_id)
+    elif isinstance(data, list):
+        for value in data:
+            yield from publication_records(value, publication_id)
+
+
+def publication_evidence(payloads, publication_id, expected_author):
+    records = list(publication_records(payloads, publication_id))
+    if not records or not expected_author or not expected_author.get("uniqueId"):
+        raise TikTokPageError("Autoría no verificable: faltan datos de la publicación o del usuario solicitado.")
+    evidence = {}
+    for record in records:
+        author = record.get("author")
+        identities = [author_fields(author)]
+        if isinstance(author, str) and author:
+            identities = [author_fields(users_in(payload)[author]) for payload in payloads
+                          if author in users_in(payload)] or [{"uniqueId": author.casefold()}]
+        identities.append(author_fields({"id": record.get("authorId"), "secUid": record.get("authorSecId")}))
+        for identity in identities:
+            for key, value in identity.items():
+                if key in evidence and evidence[key] != value:
+                    raise TikTokPageError("Autoría contradictoria: los identificadores de usuario no coinciden.")
+                evidence[key] = value
+    shared = evidence.keys() & expected_author.keys()
+    if any(evidence[key] != expected_author[key] for key in shared):
+        raise TikTokPageError("Autoría contradictoria: la publicación pertenece a otra cuenta.")
+    if not shared:
+        raise TikTokPageError("Autoría no verificable: no hay identificadores de usuario coincidentes.")
+    expected = {**expected_author, **evidence}
+    dates = set()
+    invalid_date = False
+    pinned = False
+    for record in records:
+        if "createTime" in record:
+            value = record["createTime"]
+            if not isinstance(value, bool) and str(value).isdigit() and 1451606400 <= int(value) <= time() + 300:
+                dates.add(int(value))
+            else:
+                invalid_date = True
+        pinned = pinned or record.get("isPinnedItem") is True or record.get("isPinned") is True
+    metadata = {"created_at": next(iter(dates)) if len(dates) == 1 and not invalid_date else None,
+                "pinned": pinned}
+    item = find_video_payload(records, publication_id) or records[0]
+    return item, expected, metadata
+
+
 # Extract video metrics and available public comments.
-def extract_video_details(page, video_url, fallback_preview=None):
+def extract_video_details(page, video_url, fallback_preview=None, expected_author=None, metadata=None, profile_payloads=()):
     validate_content_page(page)
-    match = re.fullmatch(r"/@[^/]+/video/(\d+)/?", urlparse(video_url).path)
+    match = re.fullmatch(r"/@([^/]+)/(video|photo)/(\d+)/?", urlparse(video_url).path)
     if not match:
         raise TikTokPageError("Invalid TikTok video URL.")
     payload = get_embedded_json(page)
     validate_content_page(page)
-    item = find_video_payload(payload, match.group(1))
-    if item is None:
-        logging.getLogger(__name__).debug(
-            f"Video {match.group(1)}: requested metrics are missing; "
-            "no unrelated video metrics will be used."
-        )
+    item, owner, info = publication_evidence([*payload, *profile_payloads], match.group(3), expected_author)
+    if match.group(1).casefold() not in {str(value).casefold() for value in owner.values()}:
+        raise TikTokPageError("Autoría contradictoria: el enlace no corresponde al autor confirmado.")
+    if metadata is not None:
+        metadata.update(info)
 
     result = {
         "url": video_url,
+        "type": match.group(2),
         "preview_url": fallback_preview,
         "title": "Not available",
         "views": "N/A",
@@ -518,11 +622,20 @@ def extract_video_details(page, video_url, fallback_preview=None):
     if item:
         stats = item.get("stats") or {}
         video_info = item.get("video") or {}
+        images = (item.get("imagePost") or {}).get("images") or []
+        photo_preview = None
+        if isinstance(images, list) and images and isinstance(images[0], dict):
+            for key in ("imageURL", "displayImage"):
+                urls = (images[0].get(key) or {}).get("urlList") or []
+                if isinstance(urls, list) and urls and isinstance(urls[0], str):
+                    photo_preview = urls[0]
+                    break
 
         result.update(
             {
                 "preview_url": (
                         fallback_preview
+                        or photo_preview
                         or video_info.get("cover")
                         or video_info.get("originCover")
                         or video_info.get("dynamicCover")
@@ -548,10 +661,27 @@ def extract_video_details(page, video_url, fallback_preview=None):
 
 
 # Open each video and read available details.
-def extract_latest_videos(context, video_cards, warnings=None):
+def extract_latest_videos(context, video_cards, warnings=None, expected_author=None, profile_payloads=()):
     results = []
-
-    for number, card in enumerate(video_cards, start=1):
+    metadata_by_id = {}
+    candidates = list(video_cards)
+    grid_order = {card["id"]: index for index, card in enumerate(candidates)}
+    known_dates = {}
+    pinned_detected = False
+    for card in candidates:
+        try:
+            _, _, info = publication_evidence(profile_payloads, card["id"], expected_author)
+            pinned_detected = pinned_detected or info["pinned"]
+            if info["created_at"] is not None:
+                known_dates[card["id"]] = info["created_at"]
+        except TikTokPageError:
+            pass
+    ordered = bool(candidates) and len(known_dates) == len(candidates)
+    if ordered:
+        candidates.sort(key=lambda card: known_dates[card["id"]], reverse=True)
+    for number, card in enumerate(candidates, start=1):
+        if ordered and len(results) >= 10 and all(metadata_by_id[item["id"]].get("created_at") is not None for item in results):
+            break
         video_page = context.new_page()
 
         result = {
@@ -577,19 +707,25 @@ def extract_latest_videos(context, video_cards, warnings=None):
             validate_content_page(video_page)
 
             if response and response.status == 200:
+                info = {}
                 details = extract_video_details(
                     video_page,
                     card["url"],
                     card.get("preview_url"),
+                    expected_author=expected_author,
+                    metadata=info,
+                    profile_payloads=profile_payloads,
                 )
 
                 result.update(details)
+                metadata_by_id[card["id"]] = info
 
             else:
                 raise TikTokPageError(
                     f"Unable to access video (HTTP {response.status if response else 'no response'})."
                 )
 
+            results.append(result)
             logging.getLogger(__name__).debug(
                 f"Video {number}: "
                 f"{len(result['comments_list'])} comments found."
@@ -598,15 +734,21 @@ def extract_latest_videos(context, video_cards, warnings=None):
         except (PlaywrightError, TikTokPageError) as error:
             message = str(error) if isinstance(error, TikTokPageError) else "Falló la carga del video en TikTok."
             if warnings is not None:
-                warnings.append(f"Video {number}: {message}")
+                warnings.append(f"Publicación {card['id']} descartada: {message}")
             logging.getLogger(__name__).debug(f"Video {number}: {message}")
 
         finally:
             video_page.close()
 
-        results.append(result)
-
-    return results
+    if results and all(metadata_by_id[item["id"]].get("created_at") is not None for item in results):
+        results.sort(key=lambda item: metadata_by_id[item["id"]]["created_at"], reverse=True)
+    elif results:
+        results.sort(key=lambda item: grid_order[item["id"]])
+        if warnings is not None:
+            warnings.append("Faltan fechas fiables o existen fechas contradictorias; se conserva el orden de la cuadrícula, sin garantizar que sean las diez publicaciones más recientes.")
+    if (pinned_detected or any(info.get("pinned") for info in metadata_by_id.values())) and warnings is not None:
+        warnings.append("Se detectaron publicaciones fijadas; su posición visual no se utilizó como fecha de publicación.")
+    return results[:10]
 
 
 # Retrieve a public profile and its available details.
@@ -673,25 +815,29 @@ def scrape_profile(username):
         except PlaywrightTimeoutError:
             logging.getLogger(__name__).debug("Video links unavailable.")
 
-        video_cards = get_profile_video_cards(
-            page,
-            limit=10,
-        )
-
-        logging.getLogger(__name__).debug(
-            f"Video cards found: {len(video_cards)}"
-        )
-
         warnings = []
+        try:
+            validate_content_page(page)
+            payloads = get_embedded_json(page)
+            expected_author = profile_author(payloads, username)
+            video_cards = get_profile_video_cards(page, limit=None, username=username,
+                                                  expected_author=expected_author, warnings=warnings)
+        except TikTokPageError as error:
+            warnings.append(str(error))
+            payloads, expected_author, video_cards = [], {}, []
         profile["videos"] = extract_latest_videos(
             context,
             video_cards,
             warnings=warnings,
+            expected_author=expected_author,
+            profile_payloads=payloads,
         )
+        if len(profile["videos"]) < 10:
+            warnings.append(f"Resultado parcial: {len(profile['videos'])} publicaciones verificadas de hasta 10.")
         if any(video["views"] == "N/A" for video in profile["videos"]):
             warnings.append("Algunos videos no tienen estadísticas disponibles; no se sustituyeron con otros videos.")
         if not video_cards:
-            warnings.append("No se pudieron cargar videos públicos. El perfil puede estar vacío o restringido.")
+            warnings.append("No se obtuvieron candidatos de la cuadrícula del perfil; no se utilizaron recomendaciones.")
         profile["_meta"] = {"mode": "real", "warnings": warnings}
 
         return profile
