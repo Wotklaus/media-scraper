@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from .scraper import scrape_profile
 from .demo import CaptureNotFoundError, load_capture
 from .session import SessionBusyError
+from .presentation import print_profile
 
 app = FastAPI(title="Media Scraper API")
 
@@ -20,9 +21,9 @@ FRONTEND_DIR = BASE_DIR / "frontend"
 @app.get("/api/profile/{username}")
 def get_profile(username: str, mode: Literal["real", "demo"] = "real"):
     try:
-        if mode == "demo":
-            return load_capture(username)
-        return scrape_profile(username)
+        profile = load_capture(username) if mode == "demo" else scrape_profile(username)
+        print_profile(profile)
+        return profile
     except SessionBusyError as error:
         raise HTTPException(status_code=409, detail=str(error))
     except CaptureNotFoundError as error:

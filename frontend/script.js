@@ -4,8 +4,6 @@ const API_URL = "";
 const form = document.getElementById("searchForm");
 const searchButton = document.getElementById("searchButton");
 const statusMessage = document.getElementById("statusMessage");
-const queryMode = document.getElementById("queryMode");
-const dataSource = document.getElementById("dataSource");
 const dashboard = document.getElementById("dashboard");
 const avatar = document.getElementById("profileAvatar");
 const avatarFallback = document.getElementById("avatarFallback");
@@ -18,6 +16,10 @@ const videosGrid = document.getElementById("videosGrid");
 const videosMessage = document.getElementById("videosMessage");
 const videosCount = document.querySelector(".videos-card .tag");
 
+const downloadJSON = document.getElementById("downloadJSON");
+const downloadCSV = document.getElementById("downloadCSV");
+
+let currentProfile = null;
 let currentVideos = [];
 let currentVideoIndex = 0;
 
@@ -188,13 +190,6 @@ function displayVideos(videos) {
 
 // Display profile details.
 function displayProfile(profile) {
-    const metadata = profile._meta || {};
-    dataSource.textContent = metadata.mode === "demo"
-        ? `DEMOSTRACIÓN · Captura de una consulta real: ${metadata.captured_at}`
-        : "CONSULTA REAL · Datos consultados ahora en TikTok";
-    if (metadata.warnings?.length) {
-        dataSource.textContent += ` · ${metadata.warnings.join(" ")}`;
-    }
     setText("profileName", profile.nickname);
     setText("profileUsername", `@${profile.username}`);
     setText("profileBio", profile.bio);
@@ -210,17 +205,20 @@ function displayProfile(profile) {
         `https://www.tiktok.com/@${encodeURIComponent(profile.username)}`;
 
     displayVideos(profile.videos);
+    currentProfile = profile;
+    downloadJSON.disabled = false;
+    downloadCSV.disabled = false;
     dashboard.classList.remove("hidden");
 }
 
 // Request data from FastAPI.
-async function fetchProfile(username, mode) {
+async function fetchProfile(username) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 600000);
 
     try {
         const response = await fetch(
-            `${API_URL}/api/profile/${encodeURIComponent(username)}?mode=${encodeURIComponent(mode)}`,
+            `${API_URL}/api/profile/${encodeURIComponent(username)}?mode=real`,
             { signal: controller.signal }
         );
 
@@ -253,19 +251,16 @@ form.addEventListener("submit", async (event) => {
     }
 
     searchButton.disabled = true;
-    queryMode.disabled = true;
+    currentProfile = null;
+    downloadJSON.disabled = true;
+    downloadCSV.disabled = true;
     dashboard.classList.add("hidden");
-    const mode = queryMode.value;
-    statusMessage.textContent = mode === "demo"
-        ? "Cargando captura guardada..."
-        : "Consultando TikTok en segundo plano. Puede tardar varios minutos...";
+    statusMessage.textContent = "Consultando TikTok. Puede tardar varios minutos...";
 
     try {
-        const profile = await fetchProfile(username, mode);
+        const profile = await fetchProfile(username);
         displayProfile(profile);
-        statusMessage.textContent = mode === "demo"
-            ? "Demostración cargada desde una captura guardada."
-            : "Consulta real completada. Revisa los avisos si faltan datos.";
+        statusMessage.textContent = (profile._meta?.warnings || []).join(" ");
 
     } catch (error) {
         statusMessage.textContent =
@@ -275,7 +270,6 @@ form.addEventListener("submit", async (event) => {
 
     } finally {
         searchButton.disabled = false;
-        queryMode.disabled = false;
     }
 });
 
@@ -302,3 +296,63 @@ document.querySelectorAll(".stat-item").forEach((button) => {
 // Close the details window.
 document.getElementById("closeDetails")
     .addEventListener("click", () => detailsModal.close());
+
+// Project only the public fields, without changing the displayed response.
+function publicExport(profile) {
+    const pick = (source, fields) => Object.fromEntries(fields.map((key) => [key, source[key] ?? null]));
+    const result = pick(profile, ["username", "nickname", "bio", "avatar_url", "url", "followers", "following", "likes"]);
+    for (const key of ["followers_users", "following_users"]) {
+        if (key in profile) result[key] = profile[key].slice();
+    }
+    result.videos = (profile.videos || []).map((video) => {
+        const item = pick(video, ["id", "url", "title", "preview_url", "views", "likes", "comments", "shares", "saves"]);
+        if ("comments_list" in video) {
+            item.comments_list = video.comments_list.map((comment) => pick(comment, ["username", "text"]));
+        }
+        return item;
+    });
+    if (profile._meta) {
+        result._meta = {};
+        for (const key of ["mode", "captured_at", "warnings"]) {
+            if (key in profile._meta) result._meta[key] = profile._meta[key];
+        }
+    }
+    return result;
+}
+
+function csvCell(value) {
+    let text = value == null ? "null" : typeof value === "object" ? JSON.stringify(value) : String(value);
+    if (/^[\s\u0000-\u001f]*[=+@-]/u.test(text) || /^[\t\r\n]/u.test(text)) text = "'" + text;
+    return '"' + text.replace(/"/g, '""') + '"';
+}
+
+function exportCSV(profile) {
+    const headers = ["Usuario", "Nickname", "URL del perfil", "Biografía", "Avatar URL", "Seguidores", "Seguidos", "Likes del perfil",
+        "ID publicación", "URL publicación", "Descripción", "Miniatura URL", "Visualizaciones", "Likes publicación", "Comentarios", "Compartidos", "Guardados",
+        "Comentarios recuperados", "Usuarios seguidores recuperados", "Usuarios seguidos recuperados", "Metadatos"];
+    const posts = profile.videos.length ? profile.videos : [null];
+    const rows = posts.map((post) => [profile.username, profile.nickname, profile.url, profile.bio, profile.avatar_url,
+        profile.followers, profile.following, profile.likes, post?.id, post?.url, post?.title, post?.preview_url,
+        post?.views, post?.likes, post?.comments, post?.shares, post?.saves, post?.comments_list,
+        profile.followers_users, profile.following_users, profile._meta]);
+    return "\uFEFF" + [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+}
+
+function downloadResult(format) {
+    if (!currentProfile) return;
+    const profile = publicExport(currentProfile);
+    const content = format === "json" ? JSON.stringify(profile, null, 2) : exportCSV(profile);
+    const blob = new Blob([content], {type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const username = String(profile.username || "perfil").replace(/[^a-zA-Z0-9._]/g, "_");
+    link.href = url;
+    link.download = `media-scraper_${username}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+downloadJSON.addEventListener("click", () => downloadResult("json"));
+downloadCSV.addEventListener("click", () => downloadResult("csv"));

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Media Scraper | Dashboard</title>
+    <title>Social Media Analytics</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -14,33 +14,26 @@
         <div class="brand">
             <div class="brand-icon">M</div>
             <div>
-                <h1>Media Scraper</h1>
-                <p>Social Media Analytics</p>
+                <h1>Social Media Analytics</h1>
+                <p>TikTok Scraper</p>
             </div>
         </div>
 
         <!-- Social platform indicators -->
         <div class="social-icons">
             <span class="social tik" title="TikTok">♪</span>
-            <span class="social instagram" title="Instagram">◎</span>
-            <span class="social youtube" title="YouTube">▶</span>
-            <span class="social facebook" title="Facebook">f</span>
+
         </div>
     </header>
 
     <main class="container">
         <section class="welcome">
             <h2>Panel de análisis</h2>
-            <p>Explora información pública de perfiles de TikTok.</p>
+
         </section>
 
         <section class="search-panel">
             <form id="searchForm">
-                <label for="queryMode">Origen de los datos</label>
-                <select id="queryMode" name="mode">
-                    <option value="real">Consulta real · TikTok en segundo plano</option>
-                    <option value="demo">Demostración · captura guardada</option>
-                </select>
                 <label for="username">Nombre de usuario</label>
                 <div class="search-box">
                     <span class="at-symbol">@</span>
@@ -52,7 +45,7 @@
                             required
                     >
                     <button id="searchButton" type="submit">
-                        Analizar perfil
+                        Analizar
                     </button>
                 </div>
             </form>
@@ -61,7 +54,7 @@
 
         <!-- Dashboard results -->
         <section id="dashboard" class="dashboard hidden">
-            <p id="dataSource" role="status"></p>
+            <div class="profile-column">
             <article class="card profile-card">
                 <div class="profile-photo">
                     <img id="profileAvatar" alt="Foto de perfil">
@@ -86,6 +79,11 @@
                     Ver perfil en TikTok ↗
                 </a>
             </article>
+            <div class="export-actions">
+                <button id="downloadJSON" class="export-button" type="button" disabled>Descargar JSON</button>
+                <button id="downloadCSV" class="export-button" type="button" disabled>Descargar CSV</button>
+            </div>
+            </div>
 
             <div class="right-column">
                 <article class="card statistics-card">
@@ -142,7 +140,7 @@
     </main>
 
     <footer>
-        Media Scraper · Academic Project
+        Social Media Analytics
     </footer>
 </div>
 

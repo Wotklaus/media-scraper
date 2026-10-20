@@ -108,7 +108,7 @@ class ExtractionTests(unittest.TestCase):
     @patch.object(scraper, 'extract_video_comments', return_value=[{'username': 'reader', 'text': 'Hi'}])
     @patch.object(scraper, 'get_embedded_json', return_value=[video('111')])
     def test_missing_metrics_preserves_comments_without_using_recommendations(self, embedded, comments):
-        with patch('builtins.print') as diagnostic:
+        with patch.object(scraper.logging.getLogger(scraper.__name__), 'debug') as diagnostic:
             result = scraper.extract_video_details(content_page(), URL)
         self.assertEqual(result['views'], 'N/A')
         self.assertEqual(result['comments_list'], comments.return_value)

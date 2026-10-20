@@ -1,5 +1,6 @@
 
 import json
+import logging
 import re
 from urllib.parse import urljoin, urlparse
 
@@ -309,13 +310,13 @@ def extract_user_list(page, list_type, limit=10):
             dialog = find_user_dialog(page)
 
             if dialog is None:
-                print(f"{list_type}: No public user list found.")
+                logging.getLogger(__name__).debug(f"{list_type}: No public user list found.")
                 page.keyboard.press("Escape")
                 return []
 
             usernames = read_usernames(dialog, limit=limit)
 
-            print(f"{list_type}: {len(usernames)} usernames found.")
+            logging.getLogger(__name__).debug(f"{list_type}: {len(usernames)} usernames found.")
 
             page.keyboard.press("Escape")
 
@@ -327,7 +328,7 @@ def extract_user_list(page, list_type, limit=10):
             except PlaywrightError:
                 pass
 
-    print(f"{list_type}: User list unavailable.")
+    logging.getLogger(__name__).debug(f"{list_type}: User list unavailable.")
     return []
 
 
@@ -497,7 +498,7 @@ def extract_video_details(page, video_url, fallback_preview=None):
     validate_content_page(page)
     item = find_video_payload(payload, match.group(1))
     if item is None:
-        print(
+        logging.getLogger(__name__).debug(
             f"Video {match.group(1)}: requested metrics are missing; "
             "no unrelated video metrics will be used."
         )
@@ -589,7 +590,7 @@ def extract_latest_videos(context, video_cards, warnings=None):
                     f"Unable to access video (HTTP {response.status if response else 'no response'})."
                 )
 
-            print(
+            logging.getLogger(__name__).debug(
                 f"Video {number}: "
                 f"{len(result['comments_list'])} comments found."
             )
@@ -598,7 +599,7 @@ def extract_latest_videos(context, video_cards, warnings=None):
             message = str(error) if isinstance(error, TikTokPageError) else "Falló la carga del video en TikTok."
             if warnings is not None:
                 warnings.append(f"Video {number}: {message}")
-            print(f"Video {number}: {message}")
+            logging.getLogger(__name__).debug(f"Video {number}: {message}")
 
         finally:
             video_page.close()
@@ -670,14 +671,14 @@ def scrape_profile(username):
             )
 
         except PlaywrightTimeoutError:
-            print("Video links unavailable.")
+            logging.getLogger(__name__).debug("Video links unavailable.")
 
         video_cards = get_profile_video_cards(
             page,
             limit=10,
         )
 
-        print(
+        logging.getLogger(__name__).debug(
             f"Video cards found: {len(video_cards)}"
         )
 

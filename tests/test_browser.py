@@ -32,7 +32,7 @@ class OfflineBrowserTests(unittest.TestCase):
                         self.assertTrue(any(c['name'] == 'synthetic_test' and c['value'] == 'offline'
                                             for c in context.cookies()))
 
-    def test_dashboard_modes_ten_videos_pagination_and_errors(self):
+    def test_dashboard_real_queries_ten_videos_pagination_and_errors(self):
         calls = []
         errors = []
         def route_request(route):
@@ -40,8 +40,8 @@ class OfflineBrowserTests(unittest.TestCase):
             if parsed.path.startswith('/api/profile/'):
                 calls.append(parsed.query)
                 if parsed.path.endswith('/missing'):
-                    route.fulfill(status=404, content_type='application/json',
-                                  body=json.dumps({'detail': 'No hay una captura guardada para este usuario.'}))
+                    route.fulfill(status=502, content_type='application/json',
+                                  body=json.dumps({'detail': 'TikTok solicita verificación.'}))
                     return
                 profile = sample_profile()
                 profile.pop('cookies')
@@ -67,7 +67,8 @@ class OfflineBrowserTests(unittest.TestCase):
                 page.locator('#username').fill('test_only')
                 page.locator('#searchButton').click()
                 page.wait_for_function("!document.getElementById('dashboard').classList.contains('hidden')")
-                self.assertIn('CONSULTA REAL', page.locator('#dataSource').inner_text())
+                self.assertEqual(page.locator('#queryMode, #dataSource').count(), 0)
+                self.assertEqual(page.locator('#statusMessage').inner_text(), '')
                 self.assertEqual(page.locator('.pagination-label').inner_text(), 'Video 1 de 10')
                 self.assertIn('Visualizaciones', page.locator('.video-metrics').inner_text())
                 for _ in range(9):
@@ -79,16 +80,14 @@ class OfflineBrowserTests(unittest.TestCase):
                 page.locator('.stat-item[data-field="followers"]').click()
                 self.assertTrue(page.locator('#detailsModal').is_visible())
                 page.locator('#closeDetails').click()
-                page.locator('#queryMode').select_option('demo')
                 page.locator('#searchButton').click()
-                page.wait_for_function("document.getElementById('dataSource').textContent.startsWith('DEMOSTRACIÓN')")
-                self.assertIn('2026-10-19', page.locator('#dataSource').inner_text())
+                page.wait_for_function("!document.getElementById('searchButton').disabled")
                 self.assertEqual(page.locator('.pagination-label').inner_text(), 'Video 1 de 10')
                 page.locator('#username').fill('missing')
                 page.locator('#searchButton').click()
-                page.wait_for_function("document.getElementById('statusMessage').textContent.includes('No hay una captura')")
+                page.wait_for_function("document.getElementById('statusMessage').textContent.includes('TikTok solicita verificación')")
                 self.assertTrue(page.locator('#dashboard').is_hidden())
-                self.assertEqual(calls, ['mode=real', 'mode=demo', 'mode=demo'])
+                self.assertEqual(calls, ['mode=real', 'mode=real', 'mode=real'])
                 self.assertEqual(errors, [])
             finally:
                 browser.close()

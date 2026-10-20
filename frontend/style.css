@@ -180,26 +180,6 @@ button {
 }
 
 /* Dashboard */
-#queryMode {
-    max-width: 100%;
-    padding: 10px;
-    margin-bottom: 18px;
-    border: 1px solid #e1e6ed;
-    border-radius: 10px;
-    background: white;
-    color: #263247;
-}
-
-#dataSource {
-    grid-column: 1 / -1;
-    padding: 14px;
-    margin: 0;
-    border: 1px solid #dae1eb;
-    border-radius: 10px;
-    background: #eff3f8;
-    overflow-wrap: anywhere;
-}
-
 .dashboard {
     display: grid;
     grid-template-columns: minmax(260px, 350px) minmax(0, 1fr);
@@ -614,4 +594,35 @@ footer {
         padding: 10px;
         font-size: 12px;
     }
+}
+
+.profile-column {
+    display: grid;
+    gap: 10px;
+    min-width: 0;
+}
+
+.export-actions {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.export-button {
+    padding: 8px 10px;
+    border: 1px solid #dae1eb;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #526172;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.export-button:hover:not(:disabled) {
+    background: #eff3f8;
+}
+
+.export-button:disabled {
+    opacity: .45;
+    cursor: not-allowed;
 }
