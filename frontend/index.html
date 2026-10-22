@@ -4,9 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Social Media Analytics</title>
+    <title>Media Scraper</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
+    <script src="big-five.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -26,9 +27,17 @@
         </div>
     </header>
 
-    <main class="container">
+    <nav class="main-nav" aria-label="Navegación principal">
+        <div class="content-width nav-content">
+        <button type="button" data-section="general" aria-current="page">General</button>
+        <button type="button" data-section="statistics">Estadísticas</button>
+        <button type="button" data-section="big-five">Big Five</button>
+        </div>
+    </nav>
+    <main class="container content-width">
+        <section id="general" class="app-section" aria-label="General">
         <section class="welcome">
-            <h2>Panel de análisis</h2>
+            <h2>Panel general</h2><p></p>
 
         </section>
 
@@ -95,36 +104,33 @@
                         <span class="tag">TikTok</span>
                     </div>
 
-                    <!-- Interactive statistic cards -->
+                    <!-- Profile summary -->
                     <div class="stats-grid">
-                        <button class="stat-item" data-field="followers">
-                            <span class="stat-icon">♧</span>
+                        <div class="stat-item" data-field="followers">
+                            <span class="stat-icon">👥</span>
                             <span class="stat-label">Seguidores</span>
                             <strong id="followers">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
 
-                        <button class="stat-item" data-field="following">
-                            <span class="stat-icon">♙</span>
+                        <div class="stat-item" data-field="following">
+                            <span class="stat-icon">👤</span>
                             <span class="stat-label">Seguidos</span>
                             <strong id="following">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
 
-                        <button class="stat-item" data-field="likes">
-                            <span class="stat-icon">♡</span>
+                        <div class="stat-item" data-field="likes">
+                            <span class="stat-icon">❤️</span>
                             <span class="stat-label">Me gusta</span>
                             <strong id="likes">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
                     </div>
                 </article>
 
                 <article class="card videos-card">
                     <div class="card-heading">
                         <div>
-                            <h3>Últimos 10 videos</h3>
-                            <p>Publicaciones recientes del perfil</p>
+                            <h3>Publicaciones recuperadas</h3>
+                            <p>Todas las publicaciones disponibles en esta consulta</p>
                         </div>
                         <span class="tag">0 / 10</span>
                     </div>
@@ -132,25 +138,72 @@
                     <!-- Video results will be added here -->
                     <div id="videosGrid" class="videos-grid"></div>
                     <p id="videosMessage" class="empty-message">
-                        El módulo de publicaciones está en desarrollo.
+                        Analiza un perfil para ver sus publicaciones.
                     </p>
+                </article>
+            </div>
+        </section>
+        </section>
+        <section id="statistics" class="app-section hidden" aria-label="Estadísticas" hidden>
+            <div class="welcome"><h2>Estadísticas</h2><p id="statisticsContext">Analiza un perfil en General para explorar sus datos.</p></div>
+            <p class="analysis-note">Los indicadores describen únicamente las publicaciones recuperadas. Las métricas abreviadas se interpretan como valores aproximados; los datos ausentes no se sustituyen por cero.</p>
+            <div id="interactionSummary" class="stats-grid"></div>
+            <div class="analytics-grid">
+                <article class="card ranking-card">
+                    <div class="card-heading"><div><h3>Top 10 publicaciones</h3><p>Interacciones = me gusta + comentarios + compartidos + guardados.</p></div></div>
+                    <label for="rankingSort">Ordenar por</label>
+                    <select id="rankingSort"><option value="views">Visualizaciones</option><option value="interactions">Interacciones</option></select>
+                    <ol id="rankingList" class="ranking-list"></ol>
+                    <p id="rankingMessage" class="empty-message">No hay publicaciones para ordenar.</p>
+                </article>
+                <article class="card"><div class="card-heading"><div><h3>Hashtags más utilizados</h3><p>Apariciones en las descripciones recuperadas.</p></div></div><div id="hashtagList" class="hashtag-list"></div><p id="hashtagMessage" class="empty-message">No hay hashtags disponibles.</p></article>
+            </div>
+        </section>
+        <section id="big-five" class="app-section hidden" aria-label="Big Five" hidden>
+            <div class="welcome"><h2>Big Five</h2><p>Explora conexiones y señales del lenguaje.</p></div>
+            <div class="bf-overview">
+            <div class="card profile-selector">
+                <label for="storedProfile">Perfil almacenado</label>
+                <select id="storedProfile" disabled><option value="">Selecciona un perfil</option></select>
+                <button id="refreshStoredProfiles" class="export-button" type="button">Actualizar perfiles</button>
+                <p id="bigFiveStatus" role="status" aria-live="polite">Selecciona Big Five para consultar los perfiles de MongoDB.</p>
+            </div>
+            <div id="embeddingSummary" class="stats-grid" aria-live="polite"></div>
+            </div>
+            <div class="bf-grid">
+                <article class="card bf-map">
+                    <div class="card-heading"><div><h3>Mapa semántico</h3><p>Hasta 10 publicaciones · PCA en dos dimensiones</p></div><span id="mapCount" class="tag">0 puntos</span></div>
+                    <div class="map-workspace">
+                        <div id="semanticMap" class="semantic-map" aria-label="Proyección de publicaciones"></div>
+                        <aside id="mapDetail" class="map-detail" aria-live="polite" hidden></aside>
+                    </div>
+                    <div class="map-toolbar"><div id="mapPointList" class="map-point-list" aria-label="Seleccionar publicación"></div><span class="map-legend"><i></i> Publicación <i></i> Selección <b>─</b> Coseno ≥ 0.50 · top 5</span></div>
+                    <p id="mapNote" class="bf-caption">La distancia proyectada no equivale a la similitud coseno exacta.</p>
+                </article>
+                <article class="card bf-embeddings">
+                    <div class="card-heading"><h3>Embeddings</h3><span class="tag">OpenAI</span></div>
+                    <dl class="embedding-facts"><div><dt>Modelo</dt><dd id="embeddingModel">text-embedding-3-small</dd></div><div><dt>Publicaciones</dt><dd id="panelAvailable">—</dd></div><div><dt>Vigentes</dt><dd id="panelGenerated">—</dd></div><div><dt>Pendientes</dt><dd id="panelPending">—</dd></div></dl>
+                    <button id="generateEmbeddings" class="primary-action" type="button" disabled>Generar embeddings</button>
+                    <p id="embeddingScope" class="bf-caption">Bajo demanda · Hasta 10 publicaciones · Tiene costo</p>
+                    <p id="embeddingResult" role="status" aria-live="polite"></p>
+                </article>
+                <article class="card bf-related"><div class="card-heading"><div><h3>Publicaciones relacionadas</h3><p>Top 5 pares · Similitud coseno exacta</p></div></div><ol id="relatedPublications" class="related-pairs"></ol><p id="relatedEmpty" class="empty-message">Se necesitan al menos dos embeddings vigentes.</p></article>
+                <article class="card bf-interpretation"><div class="card-heading"><div><h3>Interpretación del contenido</h3><p id="semanticAnalysisModel">Análisis textual con OpenAI</p></div><span id="analysisState" class="tag">Sin análisis</span></div><div id="semanticInterpretation"></div><button id="analyzeContent" class="primary-action" type="button" disabled>Analizar contenido con OpenAI</button><p class="bf-caption">Solo descripciones · Tiene costo · Reutiliza análisis vigentes</p><p id="semanticResult" role="status" aria-live="polite"></p></article>
+                <article class="card bf-evaluation">
+                    <div class="card-heading"><div><h3>Big Five · Indicadores OCEAN</h3><p>OCEAN exploratorio basado en contenido, no en rasgos de la persona.</p></div><span id="oceanState" class="tag">Sin análisis</span></div>
+                    <div id="oceanDimensions" class="ocean-grid"></div>
+                    <div class="ocean-actions"><button id="analyzeBigFive" class="primary-action" type="button" disabled>Analizar Big Five</button><button id="regenerateBigFive" class="export-button" type="button" hidden>Regenerar análisis · Tiene costo</button></div>
+                    <p class="bf-caption">Presencia = publicaciones con señales / publicaciones analizadas × 100. Describe el lenguaje, no la personalidad; una emoción puntual no define un rasgo.</p>
+                    <p id="oceanResult" role="status" aria-live="polite"></p>
                 </article>
             </div>
         </section>
     </main>
 
     <footer>
-        Social Media Analytics
+        Media Scraper
     </footer>
 </div>
 
-<!-- Statistic details modal -->
-<dialog id="detailsModal">
-    <div class="modal-header">
-        <h3 id="detailsTitle">Detalles</h3>
-        <button id="closeDetails" aria-label="Cerrar">×</button>
-    </div>
-    <p id="detailsContent"></p>
-</dialog>
 </body>
 </html>
