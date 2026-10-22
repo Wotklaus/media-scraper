@@ -299,9 +299,14 @@ function downloadResult(format) {
 downloadJSON.addEventListener("click", () => downloadResult("json"));
 downloadCSV.addEventListener("click", () => downloadResult("csv"));
 
-// Navigation only changes visibility: it never requests or discards profile data.
+// General keeps its result; Big Five reads stored data independently.
+let activeSection = 'general';
 document.querySelectorAll('[data-section]').forEach((button) => {
     button.addEventListener('click', () => {
+        if (button.dataset.section === 'big-five' && window.bigFive) {
+            window.bigFive.open(activeSection === 'general' ? currentProfile?.username : null);
+        }
+        activeSection = button.dataset.section;
         document.querySelectorAll('.app-section').forEach((section) => {
             const active = section.id === button.dataset.section;
             section.hidden = !active;
@@ -370,8 +375,8 @@ function renderStatistics() {
     const rate = paired.length ? paired.reduce((sum, item) => sum + item.interactions, 0) / paired.reduce((sum, item) => sum + item.views, 0) * 100 : null;
     [
         ['👁️ Promedio de visualizaciones', views.length ? formatNumber(views.reduce((sum, value) => sum + value, 0) / views.length) : 'No disponible', `${views.length} publicaciones con visualizaciones`],
-        ['❤️ Interacciones recuperadas', interactions.length ? formatNumber(interactions.reduce((sum, value) => sum + value, 0)) : 'No disponible', `${interactions.length} publicaciones con las cuatro métricas`],
-        ['📊 Interacciones / visualizaciones', rate !== null ? `${formatNumber(rate)} %` : 'No disponible', `${paired.length} publicaciones con datos completos y visualizaciones > 0`],
+        ['❤️ Total de interacciones', interactions.length ? formatNumber(interactions.reduce((sum, value) => sum + value, 0)) : 'No disponible', `${interactions.length} publicaciones con las cuatro métricas`],
+        ['📊 Tasa de interacción', rate !== null ? `${formatNumber(rate)} %` : 'No disponible', `${paired.length} publicaciones con datos completos y visualizaciones > 0`],
     ].forEach(([label, value, coverage]) => {
         const card = createMetricChip(label, value);
         const note = document.createElement('small');
@@ -394,10 +399,6 @@ function renderStatistics() {
         hashtagList.appendChild(item);
     });
     document.getElementById('hashtagMessage').classList.toggle('hidden', hashtags.size > 0);
-    // The current API does not supply publication dates. Do not infer them from
-    // IDs, capture timestamps, or comment dates.
-    document.getElementById('dailyViews').replaceChildren();
-    document.getElementById('dailyMessage').classList.remove('hidden');
 }
 
 document.getElementById('rankingSort').addEventListener('change', renderRanking);

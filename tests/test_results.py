@@ -6,6 +6,7 @@ from copy import deepcopy
 import csv
 import io
 import json
+import logging
 from pathlib import Path
 import socket
 import tempfile
@@ -69,17 +70,27 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('cookies', output.getvalue())
         self.assertEqual(profile, original)
 
-    def test_real_and_demo_api_responses_unchanged_and_console_is_silent(self):
+    def test_real_and_demo_print_json_once_without_warning_lines(self):
         for mode in ('real', 'demo'):
             with self.subTest(mode=mode):
                 profile = sample_profile()
                 profile['_meta']['mode'] = mode
+                profile['_meta']['warnings'] = ['Extracción incompleta: CAPTCHA y selectores']
+                original = deepcopy(profile)
                 output = io.StringIO()
-                with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, redirect_stdout(output):
+                with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, self.assertNoLogs('backend', level='INFO'), redirect_stdout(output):
                     status, data = asyncio.run(request('/api/profile/test_only', f'mode={mode}'.encode()))
                 self.assertEqual(status, 200)
                 self.assertEqual(data, profile)
-                self.assertEqual(output.getvalue(), '')
+                expected = io.StringIO()
+                with redirect_stdout(expected):
+                    print_profile(profile)
+                self.assertEqual(output.getvalue(), expected.getvalue())
+                printed = json.loads(output.getvalue())
+                self.assertEqual(printed['_meta']['warnings'], original['_meta']['warnings'])
+                self.assertEqual(printed['videos'][0]['comments_list'], [{'username': 'test_reader', 'text': 'Test comment'}])
+                self.assertEqual(len(printed['videos']), len(original['videos']))
+                self.assertEqual(profile, original)
                 (load if mode == 'demo' else scrape).assert_called_once_with('test_only')
                 (scrape if mode == 'demo' else load).assert_not_called()
 
@@ -89,7 +100,7 @@ class TerminalTests(unittest.TestCase):
         output = io.StringIO()
         with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile), self.assertLogs('backend.main', level='DEBUG'), redirect_stdout(output):
             # assertLogs needs a record; the profile itself uses the existing sanitized printer.
-            main.logging.getLogger('backend.main').debug('Consulta de prueba')
+            logging.getLogger('backend.main').debug('Consulta de prueba')
             result = main.get_profile('test_only')
         self.assertIs(result, profile)
         self.assertEqual(json.loads(output.getvalue())['_meta']['warnings'], ['Extracción incompleta'])

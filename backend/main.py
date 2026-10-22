@@ -1,5 +1,4 @@
 from pathlib import Path
-import logging
 
 from typing import Literal
 
@@ -12,8 +11,14 @@ from .demo import CaptureNotFoundError, load_capture
 from .session import SessionBusyError
 from .presentation import print_profile
 from .repository import PersistenceError, save_profile
+from .embedding_routes import router as embedding_router
+from .stored_profiles import router as stored_profiles_router
+from .semantic_routes import router as semantic_router
 
 app = FastAPI(title="Media Scraper API")
+app.include_router(embedding_router)
+app.include_router(stored_profiles_router)
+app.include_router(semantic_router)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -26,8 +31,7 @@ def get_profile(username: str, mode: Literal["real", "demo"] = "real"):
         profile = load_capture(username) if mode == "demo" else scrape_profile(username)
         if mode == "real":
             save_profile(profile)
-        if logging.getLogger(__name__).isEnabledFor(logging.DEBUG):
-            print_profile(profile)
+        print_profile(profile)
         return profile
     except PersistenceError as error:
         raise HTTPException(status_code=503, detail=str(error)) from None
