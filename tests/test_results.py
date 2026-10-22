@@ -69,19 +69,30 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('cookies', output.getvalue())
         self.assertEqual(profile, original)
 
-    def test_real_and_demo_api_responses_unchanged_and_each_prints_one_json(self):
+    def test_real_and_demo_api_responses_unchanged_and_console_is_silent(self):
         for mode in ('real', 'demo'):
             with self.subTest(mode=mode):
                 profile = sample_profile()
                 profile['_meta']['mode'] = mode
                 output = io.StringIO()
-                with patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, redirect_stdout(output):
+                with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, redirect_stdout(output):
                     status, data = asyncio.run(request('/api/profile/test_only', f'mode={mode}'.encode()))
                 self.assertEqual(status, 200)
                 self.assertEqual(data, profile)
-                self.assertEqual(json.loads(output.getvalue())['_meta']['mode'], mode)
+                self.assertEqual(output.getvalue(), '')
                 (load if mode == 'demo' else scrape).assert_called_once_with('test_only')
                 (scrape if mode == 'demo' else load).assert_not_called()
+
+    def test_debug_keeps_profile_diagnostics_available(self):
+        profile = sample_profile()
+        profile['_meta']['warnings'] = ['Extracción incompleta']
+        output = io.StringIO()
+        with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile), self.assertLogs('backend.main', level='DEBUG'), redirect_stdout(output):
+            # assertLogs needs a record; the profile itself uses the existing sanitized printer.
+            main.logging.getLogger('backend.main').debug('Consulta de prueba')
+            result = main.get_profile('test_only')
+        self.assertIs(result, profile)
+        self.assertEqual(json.loads(output.getvalue())['_meta']['warnings'], ['Extracción incompleta'])
 
     def test_failed_query_has_no_success_json(self):
         output = io.StringIO()
@@ -125,7 +136,7 @@ class DownloadTests(unittest.TestCase):
             if username == 'missing':
                 raise RuntimeError('TikTok solicita verificación.')
             return empty if username == 'empty_profile' else profile
-        with patch.object(main, 'scrape_profile', side_effect=scrape), patch.object(main, 'load_capture') as load, live_server() as origin, sync_playwright() as driver, tempfile.TemporaryDirectory() as folder:
+        with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', side_effect=scrape), patch.object(main, 'load_capture') as load, live_server() as origin, sync_playwright() as driver, tempfile.TemporaryDirectory() as folder:
             browser = driver.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={'width': 1200, 'height': 900}, accept_downloads=True)

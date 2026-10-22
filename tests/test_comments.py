@@ -100,6 +100,43 @@ class CommentDOMTests(unittest.TestCase):
 
 
 class CommentFailureTests(unittest.TestCase):
+    @patch.object(scraper, 'validate_content_page')
+    def test_missing_comments_are_debug_only_and_keep_internal_warning(self, validate):
+        warnings = []
+        with self.assertNoLogs('backend.scraper', level='INFO'):
+            result = scraper._extract_dom_comments(self.page(), warnings=warnings)
+        self.assertEqual(result, [])
+        self.assertIn('selectores conocidos', warnings[0])
+        with self.assertLogs('backend.scraper', level='DEBUG') as logs:
+            scraper._extract_dom_comments(self.page())
+        self.assertTrue(all(record.levelname == 'DEBUG' for record in logs.records))
+        self.assertTrue(any('selectores conocidos' in line for line in logs.output))
+
+    @patch.object(scraper, 'validate_content_page')
+    def test_network_issues_and_dom_fallback_are_debug_only(self, validate):
+        capture = scraper.CommentResponseCapture('222')
+        issues = [
+            'El botón público de comentarios no apareció visible dentro del plazo.',
+            'Falló el clic del botón público de comentarios o no fue accionable.',
+            'No se pudo leer el JSON de comment/list.',
+            'El clic se completó, pero no se confirmó la apertura ni se cargaron comentarios públicos.',
+        ]
+        capture.issues.extend(issues)
+        page = self.page()
+        page.locator.return_value.count.return_value = 1
+        warnings = []
+        with self.assertNoLogs('backend.scraper', level='INFO'):
+            result = scraper.extract_video_comments(page, warnings=warnings, capture=capture)
+        self.assertEqual(result, [])
+        self.assertEqual(capture.issues, issues)
+        for issue in issues:
+            self.assertTrue(any(issue in warning for warning in warnings))
+        with self.assertLogs('backend.scraper', level='DEBUG') as logs:
+            scraper.extract_video_comments(page, capture=capture)
+        self.assertTrue(all(record.levelname == 'DEBUG' for record in logs.records))
+        for issue in issues:
+            self.assertTrue(any(issue in line for line in logs.output))
+
     def page(self):
         page = Mock(url='https://www.tiktok.com/@example/video/222')
         page.locator.return_value.first.wait_for.side_effect = scraper.PlaywrightTimeoutError('synthetic timeout')

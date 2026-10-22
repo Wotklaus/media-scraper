@@ -605,7 +605,7 @@ def extract_video_comments(page, limit=10, warnings=None, expected_count=None, c
         elif panel_state == "clicked_unconfirmed":
             capture.issues.append("El clic se completó, pero no se confirmó la apertura ni se cargaron comentarios públicos.")
         for message in dom_warnings:
-            logging.getLogger(__name__).warning(message)
+            logging.getLogger(__name__).debug(message)
         if warnings is not None:
             warnings.extend(dom_warnings)
         return dom_comments
@@ -622,7 +622,7 @@ def extract_video_comments(page, limit=10, warnings=None, expected_count=None, c
         )
         for issue in dict.fromkeys(capture.issues):
             message = f"Comentarios de {safe_id}: {issue}"
-            logging.getLogger(__name__).warning(message)
+            logging.getLogger(__name__).debug(message)
             if warnings is not None:
                 warnings.append(message)
 
@@ -659,7 +659,7 @@ def _extract_dom_comments(page, limit=10, warnings=None, expected_count=None, ti
     def warn(message):
         message = f"Comentarios de {urlparse(page.url).path}: {message}"
         if log_warnings:
-            logger.warning(message)
+            logger.debug(message)
         if warnings is not None:
             warnings.append(message)
 

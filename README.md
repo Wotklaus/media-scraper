@@ -36,7 +36,13 @@ bash start.sh
 Abre <http://127.0.0.1:8000>. También puedes arrancarla desde la raíz con:
 
 ```bash
-.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
+.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --no-access-log
+```
+
+La ejecución normal no imprime perfiles ni avisos de extracción parcial. Los avisos se conservan en `_meta.warnings` de la respuesta. Para consultar los detalles técnicos y el perfil público en consola, inicia explícitamente con DEBUG:
+
+```bash
+.venv/bin/python -c 'import logging; import uvicorn; logging.basicConfig(level=logging.DEBUG); uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, access_log=False)'
 ```
 
 Selecciona **Consulta real**, introduce un username y pulsa **Analizar perfil**. Las consultas usan Chromium headless: no abren ventanas. Se mantienen el dashboard, las estadísticas, los detalles y la paginación de hasta diez videos. Solo se muestran los videos que TikTok permita obtener; no se inventan elementos para completar diez.

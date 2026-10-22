@@ -19,4 +19,5 @@ echo "Press Ctrl+C to stop."
 exec .venv/bin/python -m uvicorn backend.main:app \
     --app-dir backend \
     --host 127.0.0.1 \
-    --port 8000
+    --port 8000 \
+    --no-access-log
