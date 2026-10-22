@@ -2,8 +2,8 @@
 import json
 import logging
 import re
-from time import time
-from urllib.parse import urljoin, urlparse
+from time import monotonic, time
+from urllib.parse import parse_qs, urljoin, urlparse
 
 from playwright.sync_api import (
     Error as PlaywrightError,
@@ -419,91 +419,307 @@ def get_profile_video_cards(page, limit=10, username=None, expected_author=None,
     return videos
 
 
-# Find comment items currently visible in the DOM.
+class CommentResponseCapture:
+    """Observe browser responses only; never issue or replay requests.
+
+    Association requires a single numeric aweme_id on the list request.
+    The manually reported schema did not establish that identifier: responses
+    without it are rejected until a real capture establishes another mapping.
+    """
+
+    def __init__(self, publication_id):
+        self.publication_id = str(publication_id)
+        self.comments = []
+        self.seen = set()
+        self.empty = False
+        self.issues = []
+        self.diagnostics = {}
+
+    def note(self, reason):
+        self.diagnostics[reason] = self.diagnostics.get(reason, 0) + 1
+
+    def on_response(self, response):
+        parsed = urlparse(response.url)
+        if "comment/list" not in parsed.path:
+            return
+        self.note("candidate")
+        if parsed.scheme != "https" or parsed.hostname not in {"www.tiktok.com", "tiktok.com"}:
+            self.note("discard_host")
+            return
+        if parsed.path.rstrip("/") != "/api/comment/list":
+            self.note("discard_path")
+            return
+        ids = parse_qs(parsed.query, keep_blank_values=True).get("aweme_id", [])
+        if len(ids) != 1 or not ids[0].isdigit():
+            self.note("discard_aweme_id")
+            self.issues.append("Respuesta comment/list sin aweme_id único verificable; se ignoró.")
+            return
+        if ids[0] != self.publication_id:
+            self.note("other_publication")
+            return
+        self.note("matched_publication")
+        try:
+            if response.status != 200:
+                self.note("discard_http")
+                self.issues.append("Falló la respuesta HTTP de comment/list.")
+                return
+            data = response.json()
+        except (PlaywrightError, ValueError):
+            self.note("discard_json")
+            self.issues.append("No se pudo leer el JSON de comment/list.")
+            return
+        if (not isinstance(data, dict) or type(data.get("status_code")) is not int
+                or data["status_code"] != 0 or not isinstance(data.get("comments"), list)):
+            self.note("discard_structure")
+            self.issues.append("Respuesta comment/list fallida o con estructura inválida.")
+            return
+        if "aweme_id" in data and str(data["aweme_id"]) != self.publication_id:
+            self.note("discard_aweme_id")
+            self.issues.append("Respuesta comment/list con identificador contradictorio; se ignoró.")
+            return
+        total, cursor, more = (data.get(key) for key in ("total", "cursor", "has_more"))
+        if (type(total) is not int or total < 0 or type(cursor) is not int or cursor < 0
+                or type(more) not in (int, bool) or more not in (0, 1)):
+            self.note("discard_structure")
+            self.issues.append("Respuesta comment/list con paginación o total inválidos.")
+            return
+        self.note("valid_structure")
+        if not data["comments"]:
+            if total == 0 and cursor == 0 and not more:
+                self.empty = True
+            else:
+                self.issues.append("Comentarios no disponibles: comment/list no entregó elementos aunque no confirma total cero.")
+            return
+        if total == 0:
+            self.note("discard_structure")
+            self.issues.append("Respuesta comment/list con lista y total contradictorios.")
+            return
+        for entry in data["comments"][:100]:
+            if len(self.comments) >= 10:
+                break
+            if not isinstance(entry, dict):
+                self.note("discard_structure")
+                self.issues.append("Comentario con estructura inválida omitido.")
+                continue
+            if "aweme_id" in entry and str(entry["aweme_id"]) != self.publication_id:
+                self.note("discard_aweme_id")
+                self.issues.append("Comentario de otra publicación omitido.")
+                continue
+            user = entry.get("user")
+            names = [user[key] for key in ("unique_id", "uniqueId") if key in user] if isinstance(user, dict) else []
+            text = entry.get("text")
+            if (not names or any(not isinstance(name, str) or not USERNAME_PATTERN.fullmatch(name) for name in names)
+                    or len({name.casefold() for name in names}) != 1
+                    or not isinstance(text, str) or not text.strip()):
+                self.note("discard_structure")
+                self.issues.append("Comentario sin username o texto verificables omitido.")
+                continue
+            comment = {"username": names[0], "text": text.strip()}
+            cid = entry.get("cid")
+            if isinstance(cid, (str, int)) and not isinstance(cid, bool) and str(cid).isdigit():
+                comment["cid"] = str(cid)
+            key = ("cid", comment["cid"]) if "cid" in comment else ("text", names[0].casefold(), comment["text"])
+            if key in self.seen:
+                continue
+            self.seen.add(key)
+            for field in ("create_time", "digg_count", "reply_comment_total"):
+                value = entry.get(field)
+                if type(value) is int and value >= 0:
+                    comment[field] = value
+            language = entry.get("comment_language")
+            if isinstance(language, str) and language.strip():
+                comment["comment_language"] = language
+            if len(self.comments) < 10:
+                self.comments.append(comment)
+
+
+def extract_video_comments(page, limit=10, warnings=None, expected_count=None, capture=None):
+    """Prefer associated browser JSON, with a DOM fallback in a shared 3 s budget."""
+    limit = max(0, min(limit, 10))
+    if not limit:
+        return []
+    owned = capture is None
+    if owned:
+        match = re.fullmatch(r"/@[^/]+/(?:video|photo)/(\d+)/?", urlparse(page.url).path)
+        capture = CommentResponseCapture(match.group(1) if match else "")
+        page.on("response", capture.on_response)
+    deadline = monotonic() + 3
+    panel_state = "not_requested"
+
+    def remaining(cap=3000):
+        return max(1, min(cap, int((deadline - monotonic()) * 1000)))
+
+    def panel_visible():
+        return page.locator(", ".join(f"{selector}:visible" for selector in COMMENT_SELECTORS)).count() > 0
+
+    try:
+        validate_content_page(page)
+        if not capture.comments and not capture.empty:
+            if panel_visible():
+                panel_state = "visible"
+            else:
+                trigger = page.locator('[data-e2e="comment-icon"]').first
+                try:
+                    trigger.wait_for(state="visible", timeout=remaining(1200))
+                except PlaywrightTimeoutError:
+                    panel_state = "button_unavailable"
+                    capture.issues.append("El botón público de comentarios no apareció visible dentro del plazo.")
+                else:
+                    # trial checks actionability without clicking; never force a click.
+                    try:
+                        validate_content_page(page)
+                        trigger.click(trial=True, timeout=remaining(500))
+                        trigger.click(timeout=remaining(500))
+                        panel_state = "clicked_unconfirmed"
+                        validate_content_page(page)
+                    except PlaywrightError:
+                        panel_state = "click_failed"
+                        capture.issues.append("Falló el clic del botón público de comentarios o no fue accionable.")
+            while not capture.comments and not capture.empty and monotonic() < deadline:
+                if panel_visible():
+                    panel_state = "visible"
+                    break
+                page.wait_for_timeout(remaining(100))
+                validate_content_page(page)
+        if capture.comments:
+            if panel_state == "clicked_unconfirmed":
+                panel_state = "confirmed_by_response"
+            return capture.comments[:limit]
+        if capture.empty and not capture.issues:
+            if panel_state == "clicked_unconfirmed":
+                panel_state = "confirmed_by_response"
+            logging.getLogger(__name__).debug("comment/list confirmó cero comentarios para %s", capture.publication_id)
+            return []
+        # Defer fallback warnings: a response may arrive during DOM reads.
+        dom_warnings = []
+        dom_comments = _extract_dom_comments(page, limit, dom_warnings, expected_count,
+                                            timeout=remaining(), log_warnings=False)
+        if capture.comments:
+            if panel_state == "clicked_unconfirmed":
+                panel_state = "confirmed_by_response"
+            return capture.comments[:limit]
+        if capture.empty and not capture.issues:
+            return []
+        if dom_comments:
+            panel_state = "visible"
+        elif panel_state == "clicked_unconfirmed":
+            capture.issues.append("El clic se completó, pero no se confirmó la apertura ni se cargaron comentarios públicos.")
+        for message in dom_warnings:
+            logging.getLogger(__name__).warning(message)
+        if warnings is not None:
+            warnings.extend(dom_warnings)
+        return dom_comments
+    except (PlaywrightError, TikTokPageError) as error:
+        reason = str(error) if isinstance(error, TikTokPageError) else "falló la lectura de comentarios"
+        capture.issues.append(reason)
+        return capture.comments[:limit]
+    finally:
+        if owned:
+            page.remove_listener("response", capture.on_response)
+        safe_id = capture.publication_id if capture.publication_id.isdigit() else "no verificable"
+        logging.getLogger(__name__).debug(
+            "Comentarios de %s: panel=%s; red=%s", safe_id, panel_state, capture.diagnostics,
+        )
+        for issue in dict.fromkeys(capture.issues):
+            message = f"Comentarios de {safe_id}: {issue}"
+            logging.getLogger(__name__).warning(message)
+            if warnings is not None:
+                warnings.append(message)
+
+
+# Keep the existing selectors until a real individual-comment DOM is verified.
 def find_comment_items(page):
-    for selector in COMMENT_SELECTORS:
-        locator = page.locator(selector)
-
-        if locator.count() > 0:
-            return locator
-
-    return None
+    locator = page.locator(", ".join(COMMENT_SELECTORS))
+    return locator if locator.count() else None
 
 
-# Read the text of one comment.
 def read_comment_text(item):
     for selector in COMMENT_TEXT_SELECTORS:
         locator = item.locator(selector).first
-
         try:
-            if locator.count() > 0:
-                text = locator.inner_text(timeout=1500).strip()
-
+            if locator.count():
+                text = locator.inner_text(timeout=100).strip()
                 if text:
                     return text
-
         except PlaywrightError:
             continue
-
     return None
 
 
-# Extract visible comment authors and texts.
-def extract_video_comments(page, limit=10):
+def _extract_dom_comments(page, limit=10, warnings=None, expected_count=None, timeout=3000, log_warnings=True):
+    """Read only delivered DOM comments; an unavailable list is not proof of zero."""
+    limit = max(0, min(limit, 10))
+    if not limit:
+        return []
     comments = []
     seen = set()
+    failures = 0
+    logger = logging.getLogger(__name__)
+
+    def warn(message):
+        message = f"Comentarios de {urlparse(page.url).path}: {message}"
+        if log_warnings:
+            logger.warning(message)
+        if warnings is not None:
+            warnings.append(message)
 
     try:
-        page.locator(
-            ", ".join(COMMENT_SELECTORS)
-        ).first.wait_for(
-            state="attached",
-            timeout=5000,
-        )
+        validate_content_page(page)
+        try:
+            page.locator(", ".join(COMMENT_SELECTORS)).first.wait_for(
+                state="attached", timeout=timeout,
+            )
+        except PlaywrightTimeoutError:
+            validate_content_page(page)
+            if expected_count == 0:
+                logger.debug("Comentarios: contador cero y sin elementos entregados.")
+            else:
+                warn("TikTok no entregó elementos con los selectores conocidos dentro de 3 s "
+                     f"(contador: {expected_count if expected_count is not None else 'desconocido'}). "
+                     "No se puede confirmar una lista vacía; faltan comentarios cargados o una estructura DOM verificable.")
+            return []
 
-    except PlaywrightTimeoutError:
-        return comments
+        items = find_comment_items(page)
+        if items is None:
+            warn("Los elementos desaparecieron antes de poder leerlos; extracción incompleta.")
+            return []
 
-    items = find_comment_items(page)
-
-    if items is None:
-        return comments
-
-    for index in range(min(items.count(), 60)):
-        item = items.nth(index)
-        username = None
-
-        links = item.locator('a[href*="/@"]')
-
-        for link_index in range(min(links.count(), 10)):
-            href = links.nth(link_index).get_attribute("href")
-            username = username_from_href(href)
-
-            if username:
+        # One browser read avoids per-element auto-waits and excludes nested replies
+        # from the author's links and text of their enclosing comment.
+        rows = items.evaluate_all("""(items, selectors) => items.slice(0, 60).map(item => {
+            const own = el => el.closest(selectors.items) === item;
+            const texts = selectors.text.map(selector =>
+                [...item.querySelectorAll(selector)].find(own)?.innerText?.trim());
+            return {
+                visible: !!item.getClientRects().length,
+                hrefs: [...item.querySelectorAll('a[href*="/@"]')].filter(own)
+                    .slice(0, 10).map(a => a.getAttribute('href')),
+                text: texts.find(Boolean) || null
+            };
+        })""", {"items": ", ".join(COMMENT_SELECTORS), "text": COMMENT_TEXT_SELECTORS})
+        for row in rows:
+            if not row["visible"]:
+                continue
+            username = next((name for href in row["hrefs"]
+                             if (name := username_from_href(href))), None)
+            text = row["text"]
+            if not username or not text:
+                failures += 1
+                continue
+            key = (username.casefold(), text)
+            if key in seen:
+                continue
+            seen.add(key)
+            comments.append({"username": username, "text": text})
+            if len(comments) >= limit:
                 break
-
-        text = read_comment_text(item)
-
-        if not username or not text:
-            continue
-
-        key = (username.lower(), text)
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        comments.append(
-            {
-                "username": username,
-                "text": text,
-            }
-        )
-
-        if len(comments) >= limit:
-            break
-
+        if failures:
+            warn(f"{failures} elementos sin autor o texto legibles; extracción incompleta.")
+        elif not comments:
+            warn("Se encontraron contenedores, pero ningún comentario público visible legible; no se confirma una lista vacía.")
+    except (PlaywrightError, TikTokPageError) as error:
+        reason = str(error) if isinstance(error, TikTokPageError) else "falló la lectura del DOM"
+        warn(f"Extracción incompleta: {reason}.")
     return comments
 
 
@@ -593,7 +809,7 @@ def publication_evidence(payloads, publication_id, expected_author):
 
 
 # Extract video metrics and available public comments.
-def extract_video_details(page, video_url, fallback_preview=None, expected_author=None, metadata=None, profile_payloads=()):
+def extract_video_details(page, video_url, fallback_preview=None, expected_author=None, metadata=None, profile_payloads=(), warnings=None, comment_capture=None):
     validate_content_page(page)
     match = re.fullmatch(r"/@([^/]+)/(video|photo)/(\d+)/?", urlparse(video_url).path)
     if not match:
@@ -655,6 +871,9 @@ def extract_video_details(page, video_url, fallback_preview=None, expected_autho
     result["comments_list"] = extract_video_comments(
         page,
         limit=10,
+        warnings=warnings,
+        capture=comment_capture,
+        expected_count=(item.get("stats") or {}).get("commentCount") if item else None,
     )
 
     return result
@@ -683,6 +902,8 @@ def extract_latest_videos(context, video_cards, warnings=None, expected_author=N
         if ordered and len(results) >= 10 and all(metadata_by_id[item["id"]].get("created_at") is not None for item in results):
             break
         video_page = context.new_page()
+        comment_capture = CommentResponseCapture(card["id"])
+        video_page.on("response", comment_capture.on_response)
 
         result = {
             "id": card["id"],
@@ -715,6 +936,8 @@ def extract_latest_videos(context, video_cards, warnings=None, expected_author=N
                     expected_author=expected_author,
                     metadata=info,
                     profile_payloads=profile_payloads,
+                    warnings=warnings,
+                    comment_capture=comment_capture,
                 )
 
                 result.update(details)
@@ -738,6 +961,7 @@ def extract_latest_videos(context, video_cards, warnings=None, expected_author=N
             logging.getLogger(__name__).debug(f"Video {number}: {message}")
 
         finally:
+            video_page.remove_listener("response", comment_capture.on_response)
             video_page.close()
 
     if results and all(metadata_by_id[item["id"]].get("created_at") is not None for item in results):
