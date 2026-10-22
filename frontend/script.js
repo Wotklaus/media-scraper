@@ -8,10 +8,6 @@ const dashboard = document.getElementById("dashboard");
 const avatar = document.getElementById("profileAvatar");
 const avatarFallback = document.getElementById("avatarFallback");
 
-const detailsModal = document.getElementById("detailsModal");
-const detailsTitle = document.getElementById("detailsTitle");
-const detailsContent = document.getElementById("detailsContent");
-
 const videosGrid = document.getElementById("videosGrid");
 const videosMessage = document.getElementById("videosMessage");
 const videosCount = document.querySelector(".videos-card .tag");
@@ -21,7 +17,7 @@ const downloadCSV = document.getElementById("downloadCSV");
 
 let currentProfile = null;
 let currentVideos = [];
-let currentVideoIndex = 0;
+
 
 // Update text safely.
 function setText(id, value) {
@@ -92,6 +88,12 @@ function createVideoCard(video) {
         image.src = video.preview_url;
         image.alt = video.title || "Vista previa del video";
         image.loading = "lazy";
+        image.addEventListener("error", () => {
+            const placeholder = document.createElement("div");
+            placeholder.className = "video-placeholder";
+            placeholder.textContent = "Vista previa no disponible";
+            link.replaceChildren(placeholder);
+        });
         link.appendChild(image);
     } else {
         const placeholder = document.createElement("div");
@@ -111,81 +113,37 @@ function createVideoCard(video) {
     metrics.className = "video-metrics";
 
     metrics.append(
-        createMetricChip("Visualizaciones", video.views),
-        createMetricChip("Me gusta", video.likes),
-        createMetricChip("Comentarios", video.comments),
-        createMetricChip("Compartidos", video.shares),
-        createMetricChip("Guardados", video.saves)
+        createMetricChip("👁️ Visualizaciones", video.views),
+        createMetricChip("❤️ Me gusta", video.likes),
+        createMetricChip("💬 Comentarios", video.comments),
+        createMetricChip("🔁 Compartidos", video.shares),
+        createMetricChip("🔖 Guardados", video.saves)
     );
 
-    body.append(title, metrics);
+    const original = document.createElement("a");
+    original.className = "original-link";
+    original.textContent = "Abrir publicación ↗";
+    if (link.hasAttribute("href")) {
+        original.href = link.href;
+        original.target = "_blank";
+        original.rel = "noopener noreferrer";
+    } else {
+        original.textContent = "Enlace no disponible";
+    }
+    title.title = title.textContent;
+    body.append(title, metrics, original);
     card.append(link, body);
 
     return card;
 }
 
-// Render one video and its navigation controls.
-function renderCurrentVideo() {
-    videosGrid.replaceChildren();
-
-    if (currentVideos.length === 0) {
-        videosCount.textContent = "0 / 10";
-        videosMessage.textContent =
-            "No se pudieron obtener publicaciones.";
-        videosMessage.classList.remove("hidden");
-        return;
-    }
-
-    videosMessage.classList.add("hidden");
-
-    const video = currentVideos[currentVideoIndex];
-    videosGrid.appendChild(createVideoCard(video));
-
-    videosCount.textContent =
-        `${currentVideoIndex + 1} / ${currentVideos.length}`;
-
-    const navigation = document.createElement("div");
-    navigation.className = "video-pagination";
-
-    const previous = document.createElement("button");
-    previous.className = "pagination-button";
-    previous.textContent = "← Anterior";
-    previous.disabled = currentVideoIndex === 0;
-
-    const label = document.createElement("span");
-    label.className = "pagination-label";
-    label.textContent =
-        `Video ${currentVideoIndex + 1} de ${currentVideos.length}`;
-
-    const next = document.createElement("button");
-    next.className = "pagination-button";
-    next.textContent = "Siguiente →";
-    next.disabled =
-        currentVideoIndex === currentVideos.length - 1;
-
-    previous.addEventListener("click", () => {
-        if (currentVideoIndex > 0) {
-            currentVideoIndex--;
-            renderCurrentVideo();
-        }
-    });
-
-    next.addEventListener("click", () => {
-        if (currentVideoIndex < currentVideos.length - 1) {
-            currentVideoIndex++;
-            renderCurrentVideo();
-        }
-    });
-
-    navigation.append(previous, label, next);
-    videosGrid.appendChild(navigation);
-}
-
-// Store videos and reset pagination.
+// Keep every publication returned by the backend, in its original order.
 function displayVideos(videos) {
-    currentVideos = Array.isArray(videos) ? videos.slice(0, 10) : [];
-    currentVideoIndex = 0;
-    renderCurrentVideo();
+    currentVideos = Array.isArray(videos) ? videos : [];
+    videosGrid.replaceChildren(...currentVideos.map(createVideoCard));
+    videosCount.textContent = `${currentVideos.length} publicaciones`;
+    videosMessage.textContent = "No se pudieron obtener publicaciones.";
+    videosMessage.classList.toggle("hidden", currentVideos.length > 0);
 }
 
 // Display profile details.
@@ -209,6 +167,7 @@ function displayProfile(profile) {
     downloadJSON.disabled = false;
     downloadCSV.disabled = false;
     dashboard.classList.remove("hidden");
+    renderStatistics();
 }
 
 // Request data from FastAPI.
@@ -252,6 +211,8 @@ form.addEventListener("submit", async (event) => {
 
     searchButton.disabled = true;
     currentProfile = null;
+    currentVideos = [];
+    renderStatistics();
     downloadJSON.disabled = true;
     downloadCSV.disabled = true;
     dashboard.classList.add("hidden");
@@ -260,7 +221,12 @@ form.addEventListener("submit", async (event) => {
     try {
         const profile = await fetchProfile(username);
         displayProfile(profile);
-        statusMessage.textContent = (profile._meta?.warnings || []).join(" ");
+        const count = currentVideos.length;
+        statusMessage.textContent = count < 10
+            ? `Se recuperaron ${count} publicaciones de hasta 10 solicitadas.`
+            : profile._meta?.warnings?.length
+                ? "Consulta completada con datos parciales. Algunas métricas o comentarios pueden no estar disponibles."
+                : "";
 
     } catch (error) {
         statusMessage.textContent =
@@ -272,30 +238,6 @@ form.addEventListener("submit", async (event) => {
         searchButton.disabled = false;
     }
 });
-
-// Show statistic details.
-document.querySelectorAll(".stat-item").forEach((button) => {
-    button.addEventListener("click", () => {
-        const field = button.dataset.field;
-
-        const labels = {
-            followers: "Seguidores",
-            following: "Seguidos",
-            likes: "Me gusta"
-        };
-
-        detailsTitle.textContent = labels[field];
-        detailsContent.textContent =
-            `Valor actual: ${document.getElementById(field).textContent}. ` +
-            "El análisis detallado estará disponible próximamente.";
-
-        detailsModal.showModal();
-    });
-});
-
-// Close the details window.
-document.getElementById("closeDetails")
-    .addEventListener("click", () => detailsModal.close());
 
 // Project only the public fields, without changing the displayed response.
 function publicExport(profile) {
@@ -356,3 +298,107 @@ function downloadResult(format) {
 
 downloadJSON.addEventListener("click", () => downloadResult("json"));
 downloadCSV.addEventListener("click", () => downloadResult("csv"));
+
+// Navigation only changes visibility: it never requests or discards profile data.
+document.querySelectorAll('[data-section]').forEach((button) => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.app-section').forEach((section) => {
+            const active = section.id === button.dataset.section;
+            section.hidden = !active;
+            section.classList.toggle('hidden', !active);
+        });
+        document.querySelectorAll('[data-section]').forEach((item) => {
+            if (item === button) item.setAttribute('aria-current', 'page');
+            else item.removeAttribute('aria-current');
+        });
+    });
+});
+
+// Accept unambiguous counts only. Never interpret missing values as zero.
+function metricNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) && value >= 0 ? value : null;
+    if (typeof value !== 'string') return null;
+    const text = value.trim();
+    if (/^\d+$/.test(text)) return Number.isFinite(Number(text)) ? Number(text) : null;
+    const match = text.match(/^(\d+(?:[.,]\d+)?)\s*([KMB])$/i);
+    if (!match) return null;
+    const number = Number(match[1].replace(',', '.')) * ({k: 1e3, m: 1e6, b: 1e9}[match[2].toLowerCase()]);
+    return Number.isFinite(number) ? number : null;
+}
+
+function interactionCount(video) {
+    const counts = ['likes', 'comments', 'shares', 'saves'].map((field) => metricNumber(video[field]));
+    return counts.every((count) => count !== null) ? counts.reduce((sum, count) => sum + count, 0) : null;
+}
+
+const formatNumber = (value) => new Intl.NumberFormat('es-EC', {maximumFractionDigits: 1}).format(value);
+
+function renderRanking() {
+    const field = document.getElementById('rankingSort').value;
+    const ranked = currentVideos.map((video) => ({video, value: field === 'views' ? metricNumber(video.views) : interactionCount(video)}))
+        .filter((item) => item.value !== null).sort((a, b) => b.value - a.value).slice(0, 10);
+    const list = document.getElementById('rankingList');
+    list.replaceChildren();
+    const maximum = Math.max(1, ...ranked.map((item) => item.value));
+    ranked.forEach(({video, value}) => {
+        const item = document.createElement('li');
+        const label = document.createElement('span');
+        label.textContent = video.title || 'Sin descripción';
+        const amount = document.createElement('strong');
+        amount.textContent = formatNumber(value);
+        const bar = document.createElement('div');
+        bar.className = 'ranking-bar';
+        bar.style.width = `${value / maximum * 100}%`;
+        item.append(label, amount, bar);
+        list.appendChild(item);
+    });
+    const message = document.getElementById('rankingMessage');
+    message.classList.toggle('hidden', ranked.length > 0);
+    message.textContent = currentProfile ? 'No hay métricas suficientes para este orden. Las interacciones requieren las cuatro métricas.' : 'Analiza un perfil en General para ver sus publicaciones.';
+}
+
+function renderStatistics() {
+    document.getElementById('statisticsContext').textContent = currentProfile
+        ? `@${currentProfile.username} · ${currentVideos.length} publicaciones recuperadas`
+        : 'Analiza un perfil en General para explorar sus datos.';
+    const summary = document.getElementById('interactionSummary');
+    summary.replaceChildren();
+    const views = currentVideos.map((video) => metricNumber(video.views)).filter((value) => value !== null);
+    const interactions = currentVideos.map(interactionCount).filter((value) => value !== null);
+    const paired = currentVideos.map((video) => ({views: metricNumber(video.views), interactions: interactionCount(video)}))
+        .filter((item) => item.views !== null && item.views > 0 && item.interactions !== null);
+    const rate = paired.length ? paired.reduce((sum, item) => sum + item.interactions, 0) / paired.reduce((sum, item) => sum + item.views, 0) * 100 : null;
+    [
+        ['👁️ Promedio de visualizaciones', views.length ? formatNumber(views.reduce((sum, value) => sum + value, 0) / views.length) : 'No disponible', `${views.length} publicaciones con visualizaciones`],
+        ['❤️ Interacciones recuperadas', interactions.length ? formatNumber(interactions.reduce((sum, value) => sum + value, 0)) : 'No disponible', `${interactions.length} publicaciones con las cuatro métricas`],
+        ['📊 Interacciones / visualizaciones', rate !== null ? `${formatNumber(rate)} %` : 'No disponible', `${paired.length} publicaciones con datos completos y visualizaciones > 0`],
+    ].forEach(([label, value, coverage]) => {
+        const card = createMetricChip(label, value);
+        const note = document.createElement('small');
+        note.textContent = coverage;
+        card.appendChild(note);
+        summary.appendChild(card);
+    });
+    renderRanking();
+    const hashtags = new Map();
+    currentVideos.forEach((video) => {
+        const tags = String(video.title || '').match(/#[\p{L}\p{N}_]+/gu) || [];
+        tags.forEach((tag) => { const key = tag.toLocaleLowerCase('es'); hashtags.set(key, (hashtags.get(key) || 0) + 1); });
+    });
+    const hashtagList = document.getElementById('hashtagList');
+    hashtagList.replaceChildren();
+    [...hashtags].sort((a, b) => b[1] - a[1]).slice(0, 10).forEach(([tag, count]) => {
+        const item = document.createElement('span');
+        item.className = 'tag';
+        item.textContent = `${tag} · ${count}`;
+        hashtagList.appendChild(item);
+    });
+    document.getElementById('hashtagMessage').classList.toggle('hidden', hashtags.size > 0);
+    // The current API does not supply publication dates. Do not infer them from
+    // IDs, capture timestamps, or comment dates.
+    document.getElementById('dailyViews').replaceChildren();
+    document.getElementById('dailyMessage').classList.remove('hidden');
+}
+
+document.getElementById('rankingSort').addEventListener('change', renderRanking);
+renderStatistics();

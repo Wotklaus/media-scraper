@@ -155,7 +155,7 @@ class DownloadTests(unittest.TestCase):
                     page.locator('#username').fill(current['username'])
                     page.get_by_role('button', name='Analizar', exact=True).click()
                     page.wait_for_function("!document.getElementById('searchButton').disabled")
-                    self.assertEqual(page.locator('#statusMessage').inner_text(), '')
+                    self.assertEqual(page.locator('#statusMessage').inner_text(), '' if current['videos'] else 'Se recuperaron 0 publicaciones de hasta 10 solicitadas.')
                     self.assertNotIn('CONSULTA REAL', page.locator('body').inner_text())
                     self.assertTrue(page.locator('#downloadJSON').is_enabled())
                     self.assertTrue(page.locator('#downloadCSV').is_enabled())
@@ -166,11 +166,7 @@ class DownloadTests(unittest.TestCase):
                     self.assertAlmostEqual(left['y'], right['y'], delta=1)
                     self.assertGreaterEqual(left['x'], card['x'])
                     self.assertLessEqual(right['x'] + right['width'], card['x'] + card['width'])
-                    if current['videos']:
-                        right_column = page.locator('.right-column').bounding_box()
-                        self.assertAlmostEqual(right_column['y'], card['y'], delta=1)
-                        page.get_by_role('button', name='Siguiente →').click()
-                        self.assertEqual(page.locator('.pagination-label').inner_text(), 'Video 2 de 10')
+                    self.assertEqual(page.locator('#videosGrid .video-card').count(), len(current['videos']))
                     calls_before = len(calls)
                     for extension, label in [('json', 'Descargar JSON'), ('csv', 'Descargar CSV')]:
                         with page.expect_download() as event:

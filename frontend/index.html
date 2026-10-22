@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Social Media Analytics</title>
+    <title>Media Scraper</title>
     <link rel="stylesheet" href="style.css">
     <script src="script.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
         <div class="brand">
             <div class="brand-icon">M</div>
             <div>
-                <h1>Social Media Analytics</h1>
+                <h1>Media Scraper</h1>
                 <p>TikTok Scraper</p>
             </div>
         </div>
@@ -26,9 +26,15 @@
         </div>
     </header>
 
+    <nav class="main-nav" aria-label="Navegación principal">
+        <button type="button" data-section="general" aria-current="page">General</button>
+        <button type="button" data-section="statistics">Estadísticas</button>
+        <button type="button" data-section="big-five">Big Five</button>
+    </nav>
     <main class="container">
+        <section id="general" class="app-section" aria-label="General">
         <section class="welcome">
-            <h2>Panel de análisis</h2>
+            <h2>Vista general</h2><p>Explora el perfil y sus publicaciones públicas.</p>
 
         </section>
 
@@ -95,36 +101,33 @@
                         <span class="tag">TikTok</span>
                     </div>
 
-                    <!-- Interactive statistic cards -->
+                    <!-- Profile summary -->
                     <div class="stats-grid">
-                        <button class="stat-item" data-field="followers">
-                            <span class="stat-icon">♧</span>
+                        <div class="stat-item" data-field="followers">
+                            <span class="stat-icon">👥</span>
                             <span class="stat-label">Seguidores</span>
                             <strong id="followers">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
 
-                        <button class="stat-item" data-field="following">
-                            <span class="stat-icon">♙</span>
+                        <div class="stat-item" data-field="following">
+                            <span class="stat-icon">👤</span>
                             <span class="stat-label">Seguidos</span>
                             <strong id="following">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
 
-                        <button class="stat-item" data-field="likes">
-                            <span class="stat-icon">♡</span>
+                        <div class="stat-item" data-field="likes">
+                            <span class="stat-icon">❤️</span>
                             <span class="stat-label">Me gusta</span>
                             <strong id="likes">—</strong>
-                            <span class="detail-hint">Ver detalles ↗</span>
-                        </button>
+                        </div>
                     </div>
                 </article>
 
                 <article class="card videos-card">
                     <div class="card-heading">
                         <div>
-                            <h3>Últimos 10 videos</h3>
-                            <p>Publicaciones recientes del perfil</p>
+                            <h3>Publicaciones recuperadas</h3>
+                            <p>Todas las publicaciones disponibles en esta consulta</p>
                         </div>
                         <span class="tag">0 / 10</span>
                     </div>
@@ -132,25 +135,44 @@
                     <!-- Video results will be added here -->
                     <div id="videosGrid" class="videos-grid"></div>
                     <p id="videosMessage" class="empty-message">
-                        El módulo de publicaciones está en desarrollo.
+                        Analiza un perfil para ver sus publicaciones.
                     </p>
                 </article>
+            </div>
+        </section>
+        </section>
+        <section id="statistics" class="app-section hidden" aria-label="Estadísticas" hidden>
+            <div class="welcome"><h2>Estadísticas</h2><p id="statisticsContext">Analiza un perfil en General para explorar sus datos.</p></div>
+            <p class="analysis-note">Los indicadores describen únicamente las publicaciones recuperadas. Las métricas abreviadas se interpretan como valores aproximados; los datos ausentes no se sustituyen por cero.</p>
+            <div id="interactionSummary" class="stats-grid"></div>
+            <div class="analytics-grid">
+                <article class="card ranking-card">
+                    <div class="card-heading"><div><h3>Top 10 publicaciones</h3><p>Interacciones = me gusta + comentarios + compartidos + guardados.</p></div></div>
+                    <label for="rankingSort">Ordenar por</label>
+                    <select id="rankingSort"><option value="views">Visualizaciones</option><option value="interactions">Interacciones</option></select>
+                    <ol id="rankingList" class="ranking-list"></ol>
+                    <p id="rankingMessage" class="empty-message">No hay publicaciones para ordenar.</p>
+                </article>
+                <article class="card"><div class="card-heading"><div><h3>Hashtags más utilizados</h3><p>Apariciones en las descripciones recuperadas.</p></div></div><div id="hashtagList" class="hashtag-list"></div><p id="hashtagMessage" class="empty-message">No hay hashtags disponibles.</p></article>
+                <article class="card"><div class="card-heading"><div><h3>Visualizaciones promedio por día de publicación</h3><p>Promedio de visualizaciones actuales agrupado por fecha de publicación (UTC).</p></div></div><div id="dailyViews"></div><p id="dailyMessage" class="empty-message">No hay fechas de publicación verificables disponibles.</p></article>
+            </div>
+        </section>
+        <section id="big-five" class="app-section hidden" aria-label="Big Five" hidden>
+            <div class="welcome"><h2>Big Five</h2><p>Espacio de trabajo para una futura integración de análisis.</p></div>
+            <p class="analysis-note">Estos módulos están pendientes de implementación. No hay puntuaciones ni inferencias de personalidad disponibles.</p>
+            <div class="module-grid">
+                <article class="card"><span class="tag">Pendiente</span><h3>Embeddings</h3><p>Representaciones del contenido para futuras comparaciones semánticas.</p></article>
+                <article class="card"><span class="tag">Pendiente</span><h3>Análisis semántico</h3><p>Exploración de temas y patrones del contenido recuperado.</p></article>
+                <article class="card"><span class="tag">Pendiente</span><h3>Análisis con OpenAI</h3><p>Integración por definir, con criterios explícitos de evaluación y privacidad.</p></article>
+                <article class="card"><span class="tag">Pendiente</span><h3>Metodología Big Five</h3><p>Requiere definir y validar una metodología apropiada antes de presentar resultados.</p></article>
             </div>
         </section>
     </main>
 
     <footer>
-        Social Media Analytics
+        Media Scraper
     </footer>
 </div>
 
-<!-- Statistic details modal -->
-<dialog id="detailsModal">
-    <div class="modal-header">
-        <h3 id="detailsTitle">Detalles</h3>
-        <button id="closeDetails" aria-label="Cerrar">×</button>
-    </div>
-    <p id="detailsContent"></p>
-</dialog>
 </body>
 </html>
