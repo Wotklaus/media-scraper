@@ -6,6 +6,7 @@ from copy import deepcopy
 import csv
 import io
 import json
+import logging
 from pathlib import Path
 import socket
 import tempfile
@@ -69,19 +70,40 @@ class TerminalTests(unittest.TestCase):
         self.assertNotIn('cookies', output.getvalue())
         self.assertEqual(profile, original)
 
-    def test_real_and_demo_api_responses_unchanged_and_each_prints_one_json(self):
+    def test_real_and_demo_print_json_once_without_warning_lines(self):
         for mode in ('real', 'demo'):
             with self.subTest(mode=mode):
                 profile = sample_profile()
                 profile['_meta']['mode'] = mode
+                profile['_meta']['warnings'] = ['Extracción incompleta: CAPTCHA y selectores']
+                original = deepcopy(profile)
                 output = io.StringIO()
-                with patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, redirect_stdout(output):
+                with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile) as scrape, patch.object(main, 'load_capture', return_value=profile) as load, self.assertNoLogs('backend', level='INFO'), redirect_stdout(output):
                     status, data = asyncio.run(request('/api/profile/test_only', f'mode={mode}'.encode()))
                 self.assertEqual(status, 200)
                 self.assertEqual(data, profile)
-                self.assertEqual(json.loads(output.getvalue())['_meta']['mode'], mode)
+                expected = io.StringIO()
+                with redirect_stdout(expected):
+                    print_profile(profile)
+                self.assertEqual(output.getvalue(), expected.getvalue())
+                printed = json.loads(output.getvalue())
+                self.assertEqual(printed['_meta']['warnings'], original['_meta']['warnings'])
+                self.assertEqual(printed['videos'][0]['comments_list'], [{'username': 'test_reader', 'text': 'Test comment'}])
+                self.assertEqual(len(printed['videos']), len(original['videos']))
+                self.assertEqual(profile, original)
                 (load if mode == 'demo' else scrape).assert_called_once_with('test_only')
                 (scrape if mode == 'demo' else load).assert_not_called()
+
+    def test_debug_keeps_profile_diagnostics_available(self):
+        profile = sample_profile()
+        profile['_meta']['warnings'] = ['Extracción incompleta']
+        output = io.StringIO()
+        with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', return_value=profile), self.assertLogs('backend.main', level='DEBUG'), redirect_stdout(output):
+            # assertLogs needs a record; the profile itself uses the existing sanitized printer.
+            logging.getLogger('backend.main').debug('Consulta de prueba')
+            result = main.get_profile('test_only')
+        self.assertIs(result, profile)
+        self.assertEqual(json.loads(output.getvalue())['_meta']['warnings'], ['Extracción incompleta'])
 
     def test_failed_query_has_no_success_json(self):
         output = io.StringIO()
@@ -125,7 +147,7 @@ class DownloadTests(unittest.TestCase):
             if username == 'missing':
                 raise RuntimeError('TikTok solicita verificación.')
             return empty if username == 'empty_profile' else profile
-        with patch.object(main, 'scrape_profile', side_effect=scrape), patch.object(main, 'load_capture') as load, live_server() as origin, sync_playwright() as driver, tempfile.TemporaryDirectory() as folder:
+        with patch.object(main, 'save_profile'), patch.object(main, 'scrape_profile', side_effect=scrape), patch.object(main, 'load_capture') as load, live_server() as origin, sync_playwright() as driver, tempfile.TemporaryDirectory() as folder:
             browser = driver.chromium.launch(headless=True)
             try:
                 page = browser.new_page(viewport={'width': 1200, 'height': 900}, accept_downloads=True)
@@ -144,7 +166,7 @@ class DownloadTests(unittest.TestCase):
                     page.locator('#username').fill(current['username'])
                     page.get_by_role('button', name='Analizar', exact=True).click()
                     page.wait_for_function("!document.getElementById('searchButton').disabled")
-                    self.assertEqual(page.locator('#statusMessage').inner_text(), '')
+                    self.assertEqual(page.locator('#statusMessage').inner_text(), '' if current['videos'] else 'Se recuperaron 0 publicaciones de hasta 10 solicitadas.')
                     self.assertNotIn('CONSULTA REAL', page.locator('body').inner_text())
                     self.assertTrue(page.locator('#downloadJSON').is_enabled())
                     self.assertTrue(page.locator('#downloadCSV').is_enabled())
@@ -155,11 +177,7 @@ class DownloadTests(unittest.TestCase):
                     self.assertAlmostEqual(left['y'], right['y'], delta=1)
                     self.assertGreaterEqual(left['x'], card['x'])
                     self.assertLessEqual(right['x'] + right['width'], card['x'] + card['width'])
-                    if current['videos']:
-                        right_column = page.locator('.right-column').bounding_box()
-                        self.assertAlmostEqual(right_column['y'], card['y'], delta=1)
-                        page.get_by_role('button', name='Siguiente →').click()
-                        self.assertEqual(page.locator('.pagination-label').inner_text(), 'Video 2 de 10')
+                    self.assertEqual(page.locator('#videosGrid .video-card').count(), len(current['videos']))
                     calls_before = len(calls)
                     for extension, label in [('json', 'Descargar JSON'), ('csv', 'Descargar CSV')]:
                         with page.expect_download() as event:

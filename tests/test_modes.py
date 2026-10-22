@@ -145,6 +145,11 @@ class CaptureTests(unittest.TestCase):
 
 
 class ModeAPITests(unittest.TestCase):
+    def setUp(self):
+        persistence = patch.object(main, 'save_profile')
+        self.save_profile = persistence.start()
+        self.addCleanup(persistence.stop)
+
     @patch.object(main, 'load_capture')
     @patch.object(main, 'scrape_profile', return_value=sample_profile())
     def test_default_and_explicit_real(self, scrape, load):
