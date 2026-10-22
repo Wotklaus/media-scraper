@@ -1,6 +1,7 @@
 """Manual session setup and authorized capture commands."""
 
 import argparse
+import logging
 
 from .demo import save_capture
 from .scraper import scrape_profile
@@ -23,7 +24,7 @@ def main():
         else:
             profile = scrape_profile(args.username)
             for warning in profile.get("_meta", {}).get("warnings", []):
-                print(warning)
+                logging.getLogger(__name__).debug(warning)
             path = save_capture(profile)
             print(f"Captura guardada: {path.name}")
     except (RuntimeError, ValueError) as error:
