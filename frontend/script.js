@@ -306,6 +306,9 @@ document.querySelectorAll('[data-section]').forEach((button) => {
         if (button.dataset.section === 'big-five' && window.bigFive) {
             window.bigFive.open(activeSection === 'general' ? currentProfile?.username : null);
         }
+        if (button.dataset.section === 'socialmind' && window.socialMind) {
+            window.socialMind.open();
+        }
         activeSection = button.dataset.section;
         document.querySelectorAll('.app-section').forEach((section) => {
             const active = section.id === button.dataset.section;
