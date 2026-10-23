@@ -778,3 +778,68 @@ select { padding: 10px; margin: 8px; border: 1px solid #cedde2; border-radius: 8
 @media (max-width: 700px) { #big-five .bf-overview #embeddingSummary { grid-template-columns: 1fr; } }
 #big-five .bf-interpretation { align-self: start; }
 #big-five .related-pairs { max-height: 320px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #bfd1db transparent; }
+
+/* SocialMind: shared Statistics cards, with scoped layout and evidence details. */
+#socialmind .sm-selector { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+#socialmind .sm-selector label { font-size: 13px; font-weight: 600; }
+#smProfile { flex: 1; min-width: 160px; margin: 0; }
+#smStatus { flex-basis: 100%; margin: 0; color: #596e7d; font-size: 13px; line-height: 1.5; }
+#socialmind .sm-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#socialmind .sm-metric { background: white; padding: 20px; }
+#socialmind .sm-metric .stat-icon { font-size: 18px; color: #607582; margin-bottom: 12px; }
+#socialmind .sm-metric strong { font-size: 30px; }
+#socialmind .sm-information { align-items: start; }
+#socialmind .card-heading { margin-bottom: 18px; }
+#socialmind .card-heading p { line-height: 1.6; }
+#socialmind .sm-section { margin-top: 24px; }
+#socialmind .sm-section > h3 { font-size: 18px; margin: 0 0 16px; }
+#socialmind .sm-theme { padding: 14px 0; border-top: 1px solid #e7ebf1; }
+#socialmind .sm-theme:first-of-type { padding-top: 0; border-top: 0; }
+#socialmind .sm-theme-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
+#socialmind .sm-theme h4 { font-size: 14px; margin: 0; overflow-wrap: anywhere; }
+#socialmind .tag { font-size: 11px; white-space: normal; }
+#socialmind .sm-relations { width: 100%; border-collapse: collapse; table-layout: fixed; text-align: left; font-size: 12px; }
+#socialmind .sm-relations th { color: #596e7d; background: #f7f9fc; font-weight: 600; }
+#socialmind .sm-relations th, #socialmind .sm-relations td { padding: 12px 8px; border-bottom: 1px solid #e7ebf1; }
+#socialmind .sm-relations th:last-child { width: 76px; }
+#socialmind .sm-cosine { font-variant-numeric: tabular-nums; font-weight: 600; }
+#socialmind .sm-publications { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+#socialmind .sm-publication { max-width: 100%; color: #196574; font-size: 12px; text-decoration: none; overflow-wrap: anywhere; }
+#socialmind a.sm-publication:hover { text-decoration: underline; }
+#socialmind .sm-details { border-top: 1px solid #e7ebf1; padding-top: 12px; margin-top: 14px; font-size: 12px; color: #596e7d; }
+#socialmind .sm-details summary { cursor: pointer; font-weight: 600; color: #196574; }
+#socialmind .sm-details[open] summary { margin-bottom: 14px; }
+#socialmind .sm-details p, #socialmind .sm-details blockquote { line-height: 1.65; overflow-wrap: anywhere; }
+#socialmind .sm-details blockquote { margin: 12px 0; border-left: 2px solid #cedde2; padding-left: 12px; }
+#socialmind .empty-message { font-size: 13px; line-height: 1.65; }
+#socialmind .sm-ocean-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; align-items: stretch; }
+#socialmind .sm-ocean-card { min-width: 0; display: flex; flex-direction: column; background: white; padding: 16px; border: 1px solid #e7ebf1; border-radius: 14px; }
+#socialmind .sm-ocean-card h4 { font-size: 13px; margin: 0 0 18px; }
+#socialmind .sm-ocean-number { display: block; font-size: 26px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+#socialmind .sm-meter { height: 4px; border-radius: 4px; background: #e7ebf1; overflow: hidden; margin: 14px 0; }
+#socialmind .sm-meter span { display: block; height: 100%; background: #358b91; }
+#socialmind .sm-ocean-card > small { font-size: 11px; color: #596e7d; line-height: 1.6; }
+#socialmind .sm-ocean-state { font-size: 11px; color: #596e7d; min-height: 34px; line-height: 1.5; margin: 10px 0; }
+#socialmind .sm-ocean-card > .sm-details { margin-top: auto; }
+#socialmind .sm-signal + .sm-signal { margin-top: 16px; padding-top: 12px; border-top: 1px solid #e7ebf1; }
+#socialmind .sm-signal h4 { margin-bottom: 8px; }
+#socialmind .sm-recommendation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+#socialmind .sm-recommendation { display: flex; flex-direction: column; align-items: start; }
+#socialmind .sm-recommendation .card-heading h3 { font-size: 16px; }
+#socialmind .sm-recommendation .card-heading { margin-bottom: 10px; }
+#socialmind .sm-recommendation-text { font-size: 13px; line-height: 1.7; color: #526b7a; }
+#socialmind .sm-basis { font-size: 12px; color: #596e7d; line-height: 1.6; margin: auto 0 0; }
+#socialmind .sm-recommendation .sm-details { align-self: stretch; }
+#socialmind .sm-helper { color: #596e7d; font-size: 12px; line-height: 1.65; }
+#socialmind .sm-section > p { line-height: 1.7; }
+#socialmind .sm-notice { padding: 12px 16px; background: #f7f9fc; border: 1px solid #e7ebf1; border-radius: 8px; color: #596e7d; }
+#socialmind summary:focus-visible { outline: 3px solid #2c8b91; outline-offset: 3px; }
+@media (max-width: 1100px) { #socialmind .sm-ocean-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 850px) { #socialmind .sm-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } #socialmind .sm-recommendation-grid { grid-template-columns: 1fr; } }
+@media (max-width: 550px) {
+    #socialmind .sm-metric { padding: 14px; }
+    #socialmind .sm-ocean-grid { grid-template-columns: 1fr; }
+    #socialmind .sm-ocean-state { min-height: 0; }
+    #socialmind .sm-selector { padding: 18px; }
+    #socialmind .sm-relations td, #socialmind .sm-relations th { padding: 12px 4px; }
+}
