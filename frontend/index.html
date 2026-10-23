@@ -5,9 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Media Scraper</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=20261022-sm3">
     <script src="script.js" defer></script>
     <script src="big-five.js" defer></script>
+    <script src="socialmind.js?v=20261022-sm3" defer></script>
 </head>
 <body>
 <div class="app">
@@ -32,6 +33,7 @@
         <button type="button" data-section="general" aria-current="page">General</button>
         <button type="button" data-section="statistics">Estadísticas</button>
         <button type="button" data-section="big-five">Big Five</button>
+        <button type="button" data-section="socialmind">SocialMind AI</button>
         </div>
     </nav>
     <main class="container content-width">
@@ -197,6 +199,16 @@
                     <p id="oceanResult" role="status" aria-live="polite"></p>
                 </article>
             </div>
+        </section>
+        <section id="socialmind" class="app-section hidden" aria-label="SocialMind AI" hidden>
+            <div class="welcome"><h2>SocialMind AI</h2><p>Inteligencia estratégica de contenido impulsada por IA.</p></div>
+            <div class="card sm-selector">
+                <label for="smProfile">Perfil almacenado</label>
+                <select id="smProfile" disabled><option value="">Selecciona un perfil</option></select>
+                <button id="smRefresh" class="export-button" type="button">Actualizar perfiles</button>
+                <p id="smStatus" role="status" aria-live="polite">Selecciona un perfil para consultar sus datos guardados.</p>
+            </div>
+            <div id="smResults" aria-live="polite"></div>
         </section>
     </main>
 
