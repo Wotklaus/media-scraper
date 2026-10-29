@@ -1,5 +1,4 @@
 'use strict';
-const RESEARCH_SEMANTIC_STUDY = '233a3985-c2d3-4f1e-b67a-b5c0e37a1659';
 
 class ResearchWorkspace {
     constructor(api, view, schedule = (callback, delay) => setTimeout(callback, delay), unschedule = id => clearTimeout(id)) {
@@ -87,10 +86,6 @@ class ResearchWorkspace {
     async analysis(generate = false, version = this.version) {
         const identity = this.selected;
         if (!identity || !this.view.analysis) return;
-        if (identity !== RESEARCH_SEMANTIC_STUDY) {
-            this.view.analysis({status: 'unavailable', message: 'MVP limitado a la investigación de cable UTP de 37 comentarios.'});
-            return;
-        }
         if (generate && this.analysisBusy) return;
         if (generate) { this.analysisBusy = true; this.view.analysisBusy?.(true); }
         try {
@@ -148,7 +143,7 @@ function mountResearch() {
     const labels = {draft: 'Creada · sin iniciar', queued: 'En cola · requiere trabajador', discovering: 'Descubriendo publicaciones',
         acquiring: 'Preparando registros', paused: 'Pausada', target_reached: 'Objetivo alcanzado',
         exhausted: 'Recorrido disponible finalizado', partial: 'Resultado parcial con fallos', failed: 'Procesamiento fallido', cancelled: 'Cancelada'};
-    let current = null, busy = false, analysisBusy = false, analysisStatus = null;
+    let current = null, busy = false, analysisBusy = false, analysisStatus = null, analysisEligible = false;
     function recordLabels(records = []) {
         const labels = researchRecordLabels(records, current?.synthetic);
         el('researchRecordsHeading').textContent = labels.heading;
@@ -159,7 +154,7 @@ function mountResearch() {
         const allowed = {start: ['draft'], pause: ['queued', 'discovering', 'acquiring'], resume: ['paused'], cancel: ['draft', 'queued', 'discovering', 'acquiring', 'paused']};
         document.querySelectorAll('#research [data-research-action]').forEach(button => { button.disabled = busy || !allowed[button.dataset.researchAction].includes(state); });
         el('researchCreate').disabled = busy;
-        const eligible = current?.study_id === RESEARCH_SEMANTIC_STUDY && ['exhausted', 'target_reached', 'partial'].includes(state);
+        const eligible = analysisEligible && ['exhausted', 'target_reached', 'partial'].includes(state);
         el('researchAnalyze').disabled = !eligible || analysisBusy || analysisStatus === 'processing' || analysisStatus === 'completed';
         el('researchAnalysisRefresh').disabled = !eligible || analysisBusy;
     }
@@ -182,11 +177,18 @@ function mountResearch() {
             sourceChanged();
         },
         busy(value) { busy = value; buttons(); },
-        clear() { current = null; analysisStatus = null; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels();
+        clear() { current = null; analysisStatus = null; analysisEligible = false; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels();
+            el('researchAnalyze').textContent = 'Analizar comentarios';
+            el('researchAnalysisIntro').textContent = 'Selecciona una investigación finalizada para consultar sus comentarios. El análisis envía los textos preparados a OpenAI y puede generar un costo. No realiza nuevas búsquedas.';
             el('researchAnalysisResults').replaceChildren(); el('researchAnalysisStatus').textContent = 'Selecciona la investigación para consultar su análisis.'; buttons(); },
         analysisBusy(value) { analysisBusy = value; if (value) el('researchAnalysisStatus').textContent = 'Analizando comentarios… No cierres el servidor. Puedes consultar el resultado guardado al finalizar.'; buttons(); },
         analysis(data) {
             analysisStatus = data.status;
+            if (typeof data.eligible === 'boolean') analysisEligible = data.eligible;
+            if (Number.isInteger(data.comment_count)) {
+                el('researchAnalyze').textContent = `Analizar ${data.comment_count} comentarios`;
+                el('researchAnalysisIntro').textContent = `${current?.topic || 'Investigación'} · ${data.comment_count} comentarios preparados para análisis. El análisis envía sus textos a OpenAI y puede generar un costo. No realiza nuevas búsquedas.`;
+            }
             const container = el('researchAnalysisResults'); container.replaceChildren();
             const states = {unavailable: 'No hay análisis disponible.', stale: 'El análisis anterior no corresponde al contenido actual. Puedes ejecutar uno nuevo.',
                 processing: 'Análisis en proceso. Consulta el análisis guardado en unos momentos; no se inicia otra solicitud.',
@@ -195,7 +197,7 @@ function mountResearch() {
             buttons();
             if (data.status !== 'completed' || !data.result) return;
             const result = data.result;
-            const categories = {technical_question: 'Dudas técnicas', commercial_request: 'Solicitudes comerciales', social_opinion: 'Opiniones sociales', insufficient_context: 'Contexto insuficiente'};
+            const categories = {technical_question: 'Dudas técnicas', general_question: 'Preguntas generales', commercial_request: 'Solicitudes comerciales', social_opinion: 'Opiniones sociales', insufficient_context: 'Contexto insuficiente'};
             container.append(make('p', `${data.embedding_model} · ${data.model} · ${data.generated_at}`));
             container.append(make('p', `${result.comments.length} comentarios · ${result.ambiguous_count} ambiguos. Agrupación exploratoria por coseno, umbral ${data.grouping.threshold}; sin calibración manual.`));
             (result.validation_warnings || []).forEach(warning => container.append(make('p', warning)));
@@ -207,15 +209,15 @@ function mountResearch() {
                 const details = make('details'); details.append(make('summary', `Ver ${keys.length} comentarios de respaldo`));
                 keys.forEach(key => {
                     const comment = lookup.get(key); if (!comment) return;
-                    details.append(make('p', `${key.slice(0, 8)} · ${categories[comment.category]} · ${comment.publication_id}`),
+                    details.append(make('p', `${key.slice(0, 8)} · ${categories[comment.category]} · ${comment.publication_id} · ${comment.source || 'fuente no disponible'}${comment.synthetic === true ? ' · Datos sintéticos' : ''}`),
                         make('blockquote', comment.text), make('p', `Cita verificada: «${comment.quote}». ${comment.reason}${comment.ambiguous ? ' · Ambiguo; alternativas: ' + comment.alternatives.map(c => categories[c]).join(', ') : ''}`));
                 });
                 return details;
             }
             container.append(evidence(result.comments.map(c => c.record_key)), make('h4', 'Grupos por similitud semántica'));
             result.groups.forEach(group => container.append(make('p', `${group.title} · ${group.count} comentarios · ${group.publication_count} publicaciones`), evidence(group.record_keys)));
-            container.append(make('h4', 'Necesidades, preguntas frecuentes y temas'));
-            const kinds = {need: 'Necesidad', faq: 'Pregunta frecuente', theme: 'Tema'};
+            container.append(make('h4', 'Necesidades, preguntas frecuentes, temas y tendencias'));
+            const kinds = {need: 'Necesidad', faq: 'Pregunta frecuente', theme: 'Tema o tendencia exploratoria'};
             if (!result.findings.length) container.append(make('p', 'No se obtuvieron hallazgos respaldados.'));
             result.findings.forEach(finding => container.append(make('p', `${kinds[finding.kind]}: ${finding.title} · ${finding.count} comentarios · ${finding.publication_count} publicaciones`), evidence(finding.record_keys)));
             container.append(make('h4', 'Recomendaciones de aprendizaje'), make('p', 'Se han verificado las citas de respaldo, no la eficacia pedagógica. Las actividades requieren revisión educativa; no hay enlaces, cursos ni certificaciones verificados.'));
@@ -234,6 +236,7 @@ function mountResearch() {
         study(study) {
             current = study; el('researchDetail').hidden = false;
             el('researchHeading').textContent = study.topic;
+            el('researchAnalysisIntro').textContent = `${study.topic} · consultando comentarios preparados. El análisis envía sus textos a OpenAI y puede generar un costo. No realiza nuevas búsquedas.`;
             el('researchDescriptionText').textContent = study.description;
             el('researchState').textContent = labels[study.status] || study.status;
             el('researchProgress').value = study.counters.prepared; el('researchProgress').max = study.target_records;

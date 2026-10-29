@@ -35,9 +35,9 @@ def source_schema(schema, references, source_quotes=None):
 
 
 def request_structured(client, *, model, schema, instructions, input_text,
-                       references=None, source_quotes=None, raw=False):
+                       references=None, source_quotes=None, raw=False, max_output_tokens=6000):
     response = client.responses.create(
-        model=model, store=False, max_output_tokens=6000, reasoning={'effort': 'none'},
+        model=model, store=False, max_output_tokens=max_output_tokens, reasoning={'effort': 'none'},
         instructions=instructions, input=input_text,
         text={'format': {'type': 'json_schema', 'name': schema.__name__,
                          'strict': True, 'schema': source_schema(schema, references, source_quotes) if references else schema.model_json_schema()}})

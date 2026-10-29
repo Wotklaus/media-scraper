@@ -1,105 +1,60 @@
-# MVP de inteligencia semántica de Investigación Temática
+# Inteligencia semántica de Investigación Temática
 
-El MVP usa exclusivamente la investigación `233a3985-c2d3-4f1e-b67a-b5c0e37a1659`
-(`cable utp`) y sus 37 comentarios preparados de TikTok. Requiere investigación
-finalizada, claves únicas, textos no vacíos y procedencia no sintética. Rechaza
-otro study_id, un corpus incompleto o una adquisición aún activa. No ejecuta scraping.
+El análisis usa la investigación finalizada seleccionada en **Investigación Temática**.
+Lee únicamente comentarios de `research_records` con su `study_id`, conserva
+identificadores, texto preparado, fuente y procedencia, y guarda resultados derivados
+en `research_analyses`. No ejecuta scraping ni modifica los comentarios originales.
 
 ## Uso
 
-1. Iniciar/reiniciar el backend habitual con el código actualizado y abrir
-   `http://127.0.0.1:8000`.
-2. Entrar en **Investigación Temática** y seleccionar **cable utp**, identificador
-   corto **233a3985**. Usar Siguientes/Anteriores si no está en la primera página.
-3. En **Inteligencia semántica · MVP**, consultar el análisis guardado o pulsar
-   **Analizar 37 comentarios**. El botón informa que envía textos preparados a OpenAI
-   y puede generar costo. No se ejecuta análisis por seleccionar la investigación.
-4. Revisar categorías, ambigüedades, grupos, necesidades/FAQ/temas y actividades.
-   Cada apartado permite desplegar comentarios originales preparados y citas.
+1. Reiniciar el backend habitual y abrir `http://127.0.0.1:8000`.
+2. Entrar en **Investigación Temática** y seleccionar una investigación finalizada.
+3. Revisar el nombre, la cantidad de comentarios y el estado del análisis.
+4. Pulsar **Consultar análisis guardado** para leer sin llamadas a OpenAI. Si no existe,
+   pulsar **Analizar N comentarios** cuando esté habilitado. La interfaz avisa del
+   posible costo antes del botón. Si la petición tarda, consultar el análisis guardado
+   antes de reintentar.
 
-La generación usa la configuración local existente de OpenAI en `backend/.env`.
-No se exponen credenciales en la interfaz. GET no crea el cliente ni genera vectores.
-Un resultado vigente se reutiliza; el botón no vuelve a generar un análisis completado.
-Ante fallo se puede reintentar expresamente. Los embeddings válidos del mismo hash
-se conservan y reutilizan. Si la petición del navegador vence, consultar primero el
-análisis guardado: el servidor puede seguir trabajando. Un estado processing no
-dispara otra generación. Tras una muerte abrupta del servidor, una reserva processing
-requiere revisión del operador; no se roba automáticamente para evitar cargos duplicados.
+Los endpoints son GET y POST `/api/research/studies/{study_id}/analysis`. GET solo
+lee MongoDB. POST valida el corpus completo, consulta embeddings y salida estructurada
+del proveedor existente y guarda el resultado. Un hash del corpus y una identidad
+determinista distinguen versiones y detectan textos, identificadores o procedencias
+desactualizadas en v2. El análisis v1
+guardado de cable UTP sigue consultable sin volver a generar resultados; los nuevos
+análisis usan v2.
 
-## Recorrido integrado
+Las categorías propuestas son dudas técnicas, preguntas generales, solicitudes
+comerciales, opiniones sociales y contexto insuficiente. Las preguntas y necesidades
+solo usan comentarios clasificados como preguntas; los temas pueden representar
+tendencias no educativas. Cada hallazgo y actividad muestra sus comentarios de
+respaldo, recuentos calculados de referencias únicas y citas literales comprobadas.
+La clasificación, agrupación y pertinencia pedagógica no tienen validación humana.
+No se inventan enlaces, cursos ni certificaciones; las actividades quedan pendientes
+de revisión educativa.
 
-`research_routes` → `ResearchAnalysis.source()` (solo lectura de research_records)
-→ embeddings en un lote de 37 con el cliente/modelo existentes de `embeddings.py`
-→ similitud coseno y agrupación complete-link determinista → salida estructurada
-con `request_structured()` → validación de referencias/citas → `research_analyses`.
+## Límites
 
-Los endpoints son GET y POST `/api/research/studies/{study_id}/analysis`. Solo POST
-genera resultados. La sección muestra estados unavailable, stale, processing, failed
-y completed. Los errores del proveedor se presentan mediante los diagnósticos
-saneados existentes; no se sustituyen por resultados inventados.
+Por defecto se analizan como máximo 100 comentarios y 50 000 caracteres preparados
+por solicitud. `RESEARCH_ANALYSIS_MAX_COMMENTS` permite entre 1 y 200;
+`RESEARCH_ANALYSIS_MAX_TEXT_CHARS` entre 1 y 100 000. Un corpus que exceda cualquiera
+de los límites se rechaza con un mensaje explícito: no se trunca ni se presenta como
+completo. La salida estructurada tiene un límite de tokens acotado; si el proveedor
+la devuelve incompleta, el análisis queda fallido y no se publica un resultado parcial.
+Los vectores válidos de un mismo corpus pueden reutilizarse. Una reserva `processing`
+tras una muerte abrupta del servidor requiere revisión del operador.
 
-Cada comentario conserva en el resultado su record_key, _id, publication_id, texto
-preparado, categoría, cita literal, razón y alternativas/ambigüedad. El proveedor solo
-recibe referencias cortas y textos, sin los URLs de las publicaciones ni credenciales.
-La clasificación es automática y no se presenta como referencia validada por humanos.
+La agrupación usa similitud coseno y enlace completo con umbral exploratorio 0,58;
+no está calibrado. Los casos sin vecinos suficientes permanecen individuales.
 
-Los grupos usan coseno con umbral exploratorio 0,58 y enlace completo: todos los pares
-de un grupo cumplen el umbral. No se afirma que esté calibrado. Los comentarios que
-no se unen quedan como grupos individuales; no se inventa pertenencia. No se usa la
-PCA existente limitada a diez publicaciones ni se instala una biblioteca adicional.
-El umbral inicial 0,72 produjo 37 grupos individuales sobre los vectores reales;
-se ajustó a 0,58 tras inspeccionar su distribución, sin afirmar calidad validada.
+## Verificaciones realizadas
 
-Los hallazgos tienen cantidades calculadas desde IDs únicos, no cifras del modelo.
-Las necesidades y FAQ solo pueden citar dudas técnicas; una FAQ requiere al menos dos
-comentarios. Una clasificación o un título semántico no queda validado por el mero
-hecho de que una cita sea literal: todos requieren revisión de contenido.
-
-Las recomendaciones son actividades propuestas, respaldadas por dudas técnicas de
-los hallazgos. No hay catálogo externo validado: **ninguna actividad se marca como
-verificada pedagógicamente**. Se verifican solo las citas de respaldo. No se inventan
-enlaces, cursos ni certificaciones; se rechazan referencias o recursos ajenos al MVP.
-
-## Persistencia y límites
-
-`research_analyses` guarda un documento derivado por study_id + hash del corpus +
-modelos + versión + umbral. El _id determinista evita generaciones concurrentes del
-mismo análisis. Se conservan vectores, modelos, fecha, agrupación, resultado o fallo.
-Las rutas públicas no devuelven los vectores. Se comprueba de nuevo el hash antes
-del commit para evitar publicar un análisis de una captura modificada.
-
-No se actualizan research_records, research_publications, tareas ni contadores del
-scraper. No se modifican V1/V2, su adquisición ni la infraestructura de MongoDB.
-Una petición fallida de clasificación no publica hallazgos parciales como completados.
-
-## Comprobaciones específicas
-
-```bash
-PYTHONPATH=tests .venv/bin/python -B -m unittest test_research_analysis
-PYTHONPATH=tests .venv/bin/python -B -m unittest test_research_analysis_browser
-node --test tests/test_research.cjs tests/test_research_diagnostics.cjs
-```
-
-Las pruebas controladas verifican aislamiento del estudio, integridad de originales,
-clasificación/citas, caché, agrupación sin encadenamiento transitivo, fallo y reintento,
-rechazo de recursos inventados, presentación y estados de UI. Sus respuestas de
-proveedor son fixtures de regresión, nunca un fallback del producto. La comprobación
-con el proveedor y los documentos reales debe distinguirse de esas pruebas; no se
-presentan los fixtures como análisis de los 37 comentarios reales.
-
-## Verificación sobre los comentarios reales
-
-El 29 de octubre de 2026 se ejecutó el análisis bajo demanda sobre los 37 documentos
-de esta investigación. El resultado vigente quedó en `research_analyses`: 14 dudas
-técnicas, 13 solicitudes comerciales, 7 opiniones sociales y 3 comentarios con
-contexto insuficiente. Los vectores reales forman 30 grupos (7 pares y 23 casos
-individuales). Se publicaron 4 hallazgos respaldados y 2 actividades propuestas;
-1 hallazgo y 3 actividades sin respaldo suficiente quedaron omitidos y se muestran
-como avisos.
-La API GET y la interfaz en Chromium leyeron el resultado guardado sin POST ni
-scraping. Un hash de los 37 documentos originales antes y después coincidió.
-
-Esta verificación confirma la ejecución y persistencia del análisis, no la calidad
-humana de las etiquetas, el umbral ni la eficacia de las actividades. Las actividades
-no tienen fuentes externas o cursos verificados y siguen pendientes de revisión
-educativa.
+- Consulta real de MongoDB: cable UTP, 37 comentarios, análisis v1 `completed`;
+  inteligencia artificial, 75 comentarios, `unavailable` y elegible. Los hashes de
+  ambos corpus originales coincidieron antes y después de la consulta.
+- La interfaz real en Chromium leyó el análisis UTP, mostró habilitado **Analizar 75
+  comentarios** para inteligencia artificial y limpió el resultado anterior al
+  cambiar. No envió ningún POST.
+- Pruebas controladas con proveedor simulado cubren persistencia por `study_id`,
+  37/75 comentarios, cambio de estudio, corpus vacío, límites, hash desactualizado,
+  citas y errores. Esas pruebas no acreditan una ejecución real de OpenAI para los
+  75 comentarios. Esa ejecución queda para el operador desde la interfaz.
