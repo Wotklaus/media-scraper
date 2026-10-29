@@ -4,7 +4,7 @@ import argparse
 import logging
 
 from .demo import save_capture
-from .scraper import scrape_profile
+from .reference_engine import scrape_profile
 from .session import configure_session
 
 

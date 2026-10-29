@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from .scraper import scrape_profile
+from .reference_engine import scrape_profile
 from .demo import CaptureNotFoundError, load_capture
 from .session import SessionBusyError
 from .presentation import print_profile
@@ -14,11 +14,13 @@ from .repository import PersistenceError, save_profile
 from .embedding_routes import router as embedding_router
 from .stored_profiles import router as stored_profiles_router
 from .semantic_routes import router as semantic_router
+from .benford_routes import router as benford_router
 
 app = FastAPI(title="Media Scraper API")
 app.include_router(embedding_router)
 app.include_router(stored_profiles_router)
 app.include_router(semantic_router)
+app.include_router(benford_router)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"

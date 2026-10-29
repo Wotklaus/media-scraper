@@ -1,0 +1,506 @@
+--- upstream/tiktok_scraper.py
++++ tiktok_scraper.py
+@@ -14,9 +14,15 @@
+ from datetime import datetime, timezone
+ from typing import Dict, Any, Optional, List
+ from playwright.async_api import async_playwright, BrowserContext, Page
+-from playwright_stealth import Stealth
+-
+-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
++# MEDIA SCRAPER: persistent session, access gates, and provenance integration.
++from ...reference_runtime import (
++    AccessRestricted, IdentityError, persistent_playwright, setup_persistent_context,
++    checked_int, first_known, metric_dict, verified_profile, verified_publication,
++    publication_url, comment_response_matches, comment_data_matches, valid_comment,
++    comment_already_captured, user_response_matches, user_data_matches, validate_access,
++)
++
++# Logging is configured by the host application, not at module import.
+ logger = logging.getLogger("TikTokScraper")
+ 
+ 
+@@ -39,6 +45,8 @@
+                             val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                             if val:
+                                 return val
++            except (AccessRestricted, IdentityError):
++                raise
+             except Exception:
+                 pass
+ 
+@@ -55,42 +63,17 @@
+         :param session_id: Cookie opcional de TikTok para saltar login wall.
+         :param headless: Si es True, ejecuta en segundo plano.
+         """
+-        self.session_id = session_id or load_env_cookie()
++        self.session_id = None  # Never read/copy private cookies; use the persistent profile.
++        self._profile_owner = {}
++        self._active_scene = None
++        self._list_status = {"67": "not_observed", "21": "not_observed"}
+         self.headless = headless
+-        self.stealth = Stealth()
++        self.stealth = None  # No stealth layer or extra dependency in the persistent session.
+ 
+     async def _setup_context(self, p) -> tuple[Any, BrowserContext]:
+         """Inicia Google Chrome con flags especiales que desactivan la detección automatizada."""
+-        launch_args = {
+-            "headless": self.headless,
+-            "args": [
+-                "--headless=new",
+-                "--disable-blink-features=AutomationControlled",
+-                "--no-sandbox",
+-                "--disable-setuid-sandbox",
+-                "--disable-infobars",
+-                "--window-size=1280,800",
+-            ],
+-        }
+-        try:
+-            browser = await p.chromium.launch(channel="chrome", **launch_args)
+-        except Exception:
+-            browser = await p.chromium.launch(**launch_args)
+-
+-        context = await browser.new_context(
+-            viewport={"width": 1280, "height": 800},
+-            locale="es-ES",
+-        )
+-
+-        # Session cookies setup
+-        if self.session_id:
+-            await context.add_cookies([
+-                {"name": "sessionid", "value": self.session_id, "domain": ".tiktok.com", "path": "/"},
+-                {"name": "sessionid_ss", "value": self.session_id, "domain": ".tiktok.com", "path": "/"},
+-                {"name": "sid_tt", "value": self.session_id, "domain": ".tiktok.com", "path": "/"},
+-            ])
+-
+-        return browser, context
++        # MEDIA SCRAPER: replace ephemeral browser/cookie setup only.
++        return await setup_persistent_context(self, p)
+ 
+     # Extrae perfil, listas, videos y comentarios en un diccionario tipado
+     async def scrape(
+@@ -115,7 +98,7 @@
+         followers_list: List[Dict[str, Any]] = []
+         following_list: List[Dict[str, Any]] = []
+         
+-        async with self.stealth.use_async(async_playwright()) as p:
++        async with persistent_playwright(self) as p:
+             browser, context = await self._setup_context(p)
+             page = await context.new_page()
+ 
+@@ -123,18 +106,28 @@
+ 
+             async def intercept_user_list(response):
+                 nonlocal followers_list, following_list, following_private
+-                if "api/user/list" in response.url:
++                if user_response_matches(response, self._profile_owner, self._active_scene):
+                     try:
+                         data = await response.json()
+-                        st_code = data.get("statusCode", 0)
++                        if not user_data_matches(data, self._profile_owner):
++                            return
++                        st_code = data.get("statusCode", data.get("status_code", 0))
+                         if st_code == 10222:
+-                            following_private = True
++                            self._list_status[self._active_scene] = "private"
++                            following_private = self._active_scene == "21"
++                            return
++                        if type(st_code) is not int or st_code != 0:
++                            self._list_status[self._active_scene] = "unavailable"
++                            return
++                        self._list_status[self._active_scene] = "partial"
+                         items = data.get("userList", [])
+                         if not items:
+                             return
+                         parsed = []
+                         for item in items:
+                             u = item.get("user", {})
++                            if not isinstance(u, dict) or not re.fullmatch(r"[A-Za-z0-9._]{1,24}", u.get("uniqueId") or ""):
++                                continue
+                             st = item.get("stats", {})
+                             parsed.append({
+                                 "username": u.get("uniqueId"),
+@@ -158,6 +151,8 @@
+                             for p_user in parsed:
+                                 if not any(x["username"] == p_user["username"] for x in following_list):
+                                     following_list.append(p_user)
++                    except (AccessRestricted, IdentityError):
++                        raise
+                     except Exception:
+                         pass
+ 
+@@ -167,6 +162,8 @@
+             try:
+                 await page.goto(profile_url, wait_until="domcontentloaded", timeout=35000)
+                 await asyncio.sleep(3)
++            except (AccessRestricted, IdentityError):
++                raise
+             except Exception as e:
+                 await browser.close()
+                 return {
+@@ -209,21 +206,22 @@
+ 
+             user_info = user_detail.get("userInfo", {})
+             user = user_info.get("user", {})
++            self._profile_owner = verified_profile(user, clean_user)
+             stats = user_info.get("stats", {})
+             stats_v2 = user_info.get("statsV2", {})
+ 
+-            def _parse_stat(key: str, default: int = 0) -> int:
++            def _parse_stat(key: str, default=None):
+                 val = stats_v2.get(key)
+                 if val is not None:
+                     try:
+-                        return int(val)
++                        return checked_int(val)
+                     except (ValueError, TypeError):
+                         pass
+                 num = stats.get(key, default)
+                 if isinstance(num, int) and num < 0:
+                     return num + (1 << 32)
+                 try:
+-                    return int(num)
++                    return checked_int(num)
+                 except (ValueError, TypeError):
+                     return default
+ 
+@@ -238,7 +236,7 @@
+                 "avatar_url": user.get("avatarLarger") or user.get("avatarMedium") or user.get("avatarThumb", ""),
+                 "followers_count": _parse_stat("followerCount"),
+                 "following_count": _parse_stat("followingCount"),
+-                "heart_count": _parse_stat("heartCount") or _parse_stat("heart"),
++                "heart_count": first_known(_parse_stat("heartCount"), _parse_stat("heart")),
+                 "video_count": _parse_stat("videoCount"),
+                 "bio": user.get("signature", ""),
+                 "bio_link": bio_link_val,
+@@ -248,20 +246,21 @@
+                 "private_account": user.get("privateAccount", False),
+                 "sec_uid": user.get("secUid", ""),
+                 "user_id": user.get("id", ""),
+-                "requires_login_for_lists": not bool(self.session_id),
++                "requires_login_for_lists": None,  # Authentication is determined by the persistent UI, not copied cookies.
+                 "following_list": [],
+                 "followers_list": [],
+                 "videos": [],
+                 "note": ""
+             }
+ 
+-            # Extract followers & following lists if session cookie is present
+-            if self.session_id:
++            # MEDIA SCRAPER: persistent browser session replaces manual cookie copying.
++            if self._profile_owner:
+                 # 1. SEGUIDORES
+                 try:
++                    self._active_scene = "67"
+                     followers_btn = await page.query_selector('strong[data-e2e="followers-count"]')
+                     if followers_btn:
+-                        await followers_btn.click(timeout=5000, force=True)
++                        await followers_btn.click(timeout=5000)
+                         await asyncio.sleep(2.0)
+                         max_scrolls = max(6, (max_list_items // 10) + 3)
+                         no_new_count = 0
+@@ -291,14 +290,17 @@
+                                 prev_len = len(followers_list)
+                         await page.keyboard.press("Escape")
+                         await asyncio.sleep(1)
++                except (AccessRestricted, IdentityError):
++                    raise
+                 except Exception as e:
+-                    logger.warning(f"Aviso al extraer seguidores: {e}")
++                    logger.warning(f"Aviso al extraer seguidores: {type(e).__name__}")
+ 
+                 # 2. SEGUIDOS
+                 try:
++                    self._active_scene = "21"
+                     following_btn = await page.query_selector('strong[data-e2e="following-count"]')
+                     if following_btn:
+-                        await following_btn.click(timeout=5000, force=True)
++                        await following_btn.click(timeout=5000)
+                         await asyncio.sleep(2.0)
+                         max_scrolls = max(6, (max_list_items // 10) + 3)
+                         no_new_count = 0
+@@ -328,13 +330,17 @@
+                                 prev_len = len(following_list)
+                         await page.keyboard.press("Escape")
+                         await asyncio.sleep(0.5)
++                except (AccessRestricted, IdentityError):
++                    raise
+                 except Exception as e:
+-                    logger.warning(f"Aviso al extraer seguidos: {e}")
++                    logger.warning(f"Aviso al extraer seguidos: {type(e).__name__}")
+             else:
+                 profile_data["note"] = (
+                     "TikTok requiere cookie 'sessionid' para listar usuarios individuales de seguidores/seguidos."
+                 )
+ 
++            self._active_scene = None
++            profile_data["list_status"] = dict(self._list_status)
+             profile_data["following_list"] = following_list[:max_list_items]
+             profile_data["followers_list"] = followers_list[:max_list_items]
+             profile_data["following_list_private"] = following_private
+@@ -398,14 +404,22 @@
+                 )
+                 for l in links:
+                     base = l.split("?")[0]
+-                    es_video_del_usuario = f"/@{clean_user}/video/" in base.lower()
++                    try:
++                        author_name, kind, _ = publication_url(base)
++                        es_video_del_usuario = author_name.casefold() == clean_user and kind == "video"
++                    except IdentityError:
++                        es_video_del_usuario = False
+                     if es_video_del_usuario and base not in raw_urls:
+                         raw_urls.append(base)
++        except (AccessRestricted, IdentityError):
++            raise
+         except Exception as e:
+-            logger.warning(f"Aviso en extracción de videos del perfil: {e}")
++            logger.warning(f"Aviso en extracción de videos del perfil: {type(e).__name__}")
+         finally:
+             try:
+                 await ctx.close()
++            except (AccessRestricted, IdentityError):
++                raise
+             except Exception:
+                 pass
+ 
+@@ -432,24 +446,30 @@
+ 
+         async def intercept_comments(response):
+             nonlocal captured_comments
+-            if "comment/list" in response.url:
++            if comment_response_matches(response, video_url):
+                 try:
+                     text = await response.text()
+                     if not text:
+                         return
+                     d = json.loads(text)
++                    if not comment_data_matches(d, video_url):
++                        return
+                     raw_comments = d.get("comments", []) or []
+                     logger.info(f"API de comentarios interceptada: {len(raw_comments)} comentarios obtenidos.")
+                     for c in raw_comments:
++                        if not valid_comment(c, video_url):
++                            continue
+                         u = c.get("user", {}) or {}
+                         c_id = str(c.get("cid", ""))
+-                        ya_capturado = any(x["comment_id"] == c_id for x in captured_comments)
++                        ya_capturado = comment_already_captured(captured_comments, c)
+                         if not ya_capturado:
+-                            created_ts = c.get("create_time", 0)
++                            created_ts = c.get("create_time")
+                             dt_str = ""
+                             if created_ts:
+                                 try:
+                                     dt_str = datetime.fromtimestamp(created_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
++                                except (AccessRestricted, IdentityError):
++                                    raise
+                                 except Exception:
+                                     pass
+ 
+@@ -458,8 +478,8 @@
+                             avatar_obj = u.get("avatar_thumb", {})
+                             author_avatar = avatar_obj.get("url_list", [""])[0] if isinstance(avatar_obj, dict) else ""
+                             comment_text = c.get("text", "")
+-                            comment_likes = c.get("digg_count", 0)
+-                            comment_replies = c.get("reply_comment_total", 0)
++                            comment_likes = c.get("digg_count")
++                            comment_replies = c.get("reply_comment_total")
+ 
+                             captured_comments.append({
+                                 "comment_id": c_id,
+@@ -474,8 +494,10 @@
+                                 "create_time": created_ts,
+                                 "date": dt_str
+                             })
++                except (AccessRestricted, IdentityError):
++                    raise
+                 except Exception as e:
+-                    logger.warning(f"Error parseando comentarios: {e}")
++                    logger.warning(f"Error parseando comentarios: {type(e).__name__}")
+ 
+         page.on("response", intercept_comments)
+ 
+@@ -483,17 +505,17 @@
+             "video_id": "",
+             "video_url": video_url,
+             "description": "",
+-            "create_time": 0,
++            "create_time": None,
+             "date": "",
+             "duration": 0,
+             "hashtags": [],
+             "cover_image_url": "",
+             "is_ad": False,
+-            "likes_count": 0,
+-            "comments_count": 0,
+-            "views_count": 0,
+-            "shares_count": 0,
+-            "bookmarks_count": 0,
++            "likes_count": None,
++            "comments_count": None,
++            "views_count": None,
++            "shares_count": None,
++            "bookmarks_count": None,
+             "music_title": "",
+             "music_author": "",
+             "comments": []
+@@ -502,8 +524,10 @@
+         try:
+             await page.goto(video_url, wait_until="domcontentloaded", timeout=25000)
+             await asyncio.sleep(2.5)
++        except (AccessRestricted, IdentityError):
++            raise
+         except Exception as e:
+-            logger.warning(f"Error navegando a video {video_url}: {e}")
++            logger.warning(f"Error navegando a video {video_url}: {type(e).__name__}")
+             await page.close()
+             return {
+                 "video_url": video_url,
+@@ -518,19 +542,24 @@
+                 d = json.loads(txt)
+                 detail = d.get("__DEFAULT_SCOPE__", {}).get("webapp.video-detail", {})
+                 item = detail.get("itemInfo", {}).get("itemStruct", {})
+-                stats = item.get("stats", {})
++                verified_publication(item, video_url, self._profile_owner)
++                video_info["_verified"] = True
++                video_info["author"] = item.get("author")
++                stats = metric_dict(item)
+ 
+                 def _to_int(val):
+                     try:
+-                        return int(val)
++                        return checked_int(val)
+                     except (ValueError, TypeError):
+-                        return 0
++                        return None
+ 
+                 c_time = _to_int(item.get("createTime", 0))
+                 dt_str = ""
+                 if c_time:
+                     try:
+                         dt_str = datetime.fromtimestamp(c_time, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
++                    except (AccessRestricted, IdentityError):
++                        raise
+                     except Exception:
+                         pass
+ 
+@@ -558,8 +587,10 @@
+                 music_obj = item.get("music", {})
+                 video_info["music_title"] = music_obj.get("title", "")
+                 video_info["music_author"] = music_obj.get("authorName", "")
++        except (AccessRestricted, IdentityError):
++            raise
+         except Exception as e:
+-            logger.warning(f"Error parseando universal data del video: {e}")
++            logger.warning(f"Error parseando universal data del video: {type(e).__name__}")
+ 
+         if not video_info["video_id"]:
+             m = re.search(r"/video/(\d+)", video_url)
+@@ -567,13 +598,8 @@
+                 video_info["video_id"] = m.group(1)
+ 
+         try:
+-            # Eliminar posibles modales/overlays de login que tapen los botones
+-            await page.evaluate("""() => {
+-                const closeBtns = document.querySelectorAll('[class*="Modal-close"], [aria-label="Cerrar"], [aria-label="Close"], button[class*="close"]');
+-                for (let b of closeBtns) try { b.click(); } catch(e){}
+-                const overlays = document.querySelectorAll('.TUXModal-overlay, div[class*="Modal-overlay"]');
+-                for (let o of overlays) o.style.pointerEvents = 'none';
+-            }""")
++            # MEDIA SCRAPER: stop at access gates; never remove login overlays.
++            await validate_access(page)
+ 
+             btn = await page.wait_for_selector(
+                 '[data-e2e="comment-icon"], [data-e2e="comment-count"], button[class*="tux"]:has-text("Comentarios"), button[class*="tux"]:has-text("Comments")',
+@@ -582,9 +608,11 @@
+             if btn:
+                 logger.info("Botón de comentarios encontrado. Haciendo clic nativo...")
+                 try:
+-                    await page.evaluate("(el) => el.click()", btn)
++                    await btn.click(timeout=3000)
++                except (AccessRestricted, IdentityError):
++                    raise
+                 except Exception:
+-                    await btn.click(force=True, timeout=3000)
++                    await btn.click(timeout=3000)
+                 await asyncio.sleep(1.5)
+ 
+                 max_comment_scrolls = max(6, (max_comments // 8) + 4)
+@@ -617,9 +645,11 @@
+                 tab_btn = await page.query_selector('button[class*="tux"]:has-text("Comentarios"), button[class*="tux"]:has-text("Comments")')
+                 if tab_btn:
+                     try:
+-                        await page.evaluate("(el) => el.click()", tab_btn)
++                        await tab_btn.click(timeout=3000)
++                    except (AccessRestricted, IdentityError):
++                        raise
+                     except Exception:
+-                        await tab_btn.click(force=True, timeout=3000)
++                        await tab_btn.click(timeout=3000)
+                     await asyncio.sleep(1.5)
+                     max_comment_scrolls = max(6, (max_comments // 8) + 3)
+                     no_new_comments = 0
+@@ -644,21 +674,33 @@
+                         else:
+                             no_new_comments = 0
+                             prev_c_len = len(captured_comments)
++        except (AccessRestricted, IdentityError):
++            raise
+         except Exception as e:
+-            logger.warning(f"Aviso al hacer clic en comentarios: {e}")
++            logger.warning(f"Aviso al hacer clic en comentarios: {type(e).__name__}")
+ 
+         if len(captured_comments) < max_comments:
+             try:
+-                dom_comments = await page.evaluate("""() => {
++                dom_comments = await page.evaluate(r"""() => {
+                     const list = [];
+                     const items = document.querySelectorAll('[data-e2e="comment-item"], div[class*="DivCommentItemContainer"], div[class*="CommentItem"]');
+                     for (let el of items) {
++                        const own = node => node && node.closest('[data-e2e="comment-item"], div[class*="DivCommentItemContainer"], div[class*="CommentItem"]') === el;
+                         const userEl = el.querySelector('[data-e2e="comment-username"], a[href*="/@"], span[class*="SpanUserName"]');
+                         const textEl = el.querySelector('[data-e2e="comment-level-1"], p[class*="PCommentText"], span[class*="SpanCommentText"]');
+                         const likeEl = el.querySelector('[data-e2e="comment-like-count"], span[class*="SpanCount"]');
+-                        if (textEl && textEl.innerText.trim()) {
++                        const anchor = userEl?.closest('a[href]') || userEl?.querySelector('a[href]');
++                        let username = "";
++                        if (anchor && el.contains(anchor) && own(anchor)) {
++                            try {
++                                const url = new URL(anchor.getAttribute('href'), 'https://www.tiktok.com');
++                                const match = url.pathname.match(/^\/@([A-Za-z0-9._]{1,24})\/?$/);
++                                if (url.protocol === 'https:' && ['www.tiktok.com', 'tiktok.com'].includes(url.hostname) && match) username = match[1];
++                            } catch (_) {}
++                        }
++                        if (own(textEl) && username && textEl.innerText.trim()) {
+                             list.push({
+-                                username: userEl ? userEl.innerText.trim().replace(/^@/, '') : "",
++                                username: username,
+                                 text: textEl.innerText.trim(),
+                                 likes_text: likeEl ? likeEl.innerText.trim() : "0"
+                             });
+@@ -667,19 +709,21 @@
+                     return list;
+                 }""")
+                 for dc in dom_comments:
+-                    no_esta_repetido = not any(x["text"] == dc["text"] for x in captured_comments)
+-                    if no_esta_repetido:
++                    no_esta_repetido = not any(x["text"] == dc["text"] and x["username"].casefold() == dc.get("username", "").casefold() for x in captured_comments)
++                    if no_esta_repetido and re.fullmatch(r"[A-Za-z0-9._]{1,24}", dc.get("username", "")):
+                         captured_comments.append({
+                             "comment_id": "",
+                             "username": dc.get("username", ""),
+                             "nickname": dc.get("username", ""),
+                             "avatar_url": "",
+                             "text": dc.get("text", ""),
+-                            "likes_count": 0,
+-                            "replies_count": 0,
+-                            "create_time": 0,
++                            "likes_count": None,
++                            "replies_count": None,
++                            "create_time": None,
+                             "date": ""
+                         })
++            except (AccessRestricted, IdentityError):
++                raise
+             except Exception:
+                 pass
+ 
