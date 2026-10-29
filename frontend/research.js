@@ -1,4 +1,5 @@
 'use strict';
+const RESEARCH_SEMANTIC_STUDY = '233a3985-c2d3-4f1e-b67a-b5c0e37a1659';
 
 class ResearchWorkspace {
     constructor(api, view, schedule = (callback, delay) => setTimeout(callback, delay), unschedule = id => clearTimeout(id)) {
@@ -53,6 +54,7 @@ class ResearchWorkspace {
             const study = await this.api(`/api/research/studies/${identity}/progress`);
             if (version !== this.version || study.study_id !== this.selected) return;
             this.view.study(study); await this.records(this.recordsOffset, version);
+            if (this.view.analysis) await this.analysis(false, version);
             if (version !== this.version) return;
             if (this.visible && ['queued', 'discovering', 'acquiring'].includes(study.status)) {
                 this.unschedule(this.timer);
@@ -82,18 +84,36 @@ class ResearchWorkspace {
             this.recordsOffset = offset; this.view.records(result);
         } catch (error) { if (version === this.version) this.view.message(error.message); }
     }
+    async analysis(generate = false, version = this.version) {
+        const identity = this.selected;
+        if (!identity || !this.view.analysis) return;
+        if (identity !== RESEARCH_SEMANTIC_STUDY) {
+            this.view.analysis({status: 'unavailable', message: 'MVP limitado a la investigación de cable UTP de 37 comentarios.'});
+            return;
+        }
+        if (generate && this.analysisBusy) return;
+        if (generate) { this.analysisBusy = true; this.view.analysisBusy?.(true); }
+        try {
+            const data = await this.api(`/api/research/studies/${identity}/analysis`, generate ? {method: 'POST'} : {}, 180000);
+            if (version === this.version && identity === this.selected) this.view.analysis(data);
+        } catch (error) {
+            if (version === this.version && identity === this.selected) this.view.analysis({status: 'failed', failure: {message: error.message}});
+        } finally {
+            if (generate) { this.analysisBusy = false; this.view.analysisBusy?.(false); }
+        }
+    }
 }
 
-async function researchRequest(path, options = {}) {
+async function researchRequest(path, options = {}, timeout = 15000) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), timeout);
     try {
         const response = await fetch(path, {...options, headers: {'Content-Type': 'application/json'}, signal: controller.signal});
         const result = await response.json();
-        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Revisa el tema, objetivo y límites de la solicitud.');
+        if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : result.detail?.message || 'Revisa el tema, objetivo y límites de la solicitud.');
         return result;
     } catch (error) {
-        if (error.name === 'AbortError') throw new Error('La consulta tardó demasiado. Consulta el estado antes de repetir una creación.');
+        if (error.name === 'AbortError') throw new Error(path.endsWith('/analysis') ? 'El análisis tardó demasiado. Consulta el análisis guardado antes de reintentarlo.' : 'La consulta tardó demasiado. Consulta el estado antes de repetir una creación.');
         throw error;
     } finally { clearTimeout(timer); }
 }
@@ -128,7 +148,7 @@ function mountResearch() {
     const labels = {draft: 'Creada · sin iniciar', queued: 'En cola · requiere trabajador', discovering: 'Descubriendo publicaciones',
         acquiring: 'Preparando registros', paused: 'Pausada', target_reached: 'Objetivo alcanzado',
         exhausted: 'Recorrido disponible finalizado', partial: 'Resultado parcial con fallos', failed: 'Procesamiento fallido', cancelled: 'Cancelada'};
-    let current = null, busy = false;
+    let current = null, busy = false, analysisBusy = false, analysisStatus = null;
     function recordLabels(records = []) {
         const labels = researchRecordLabels(records, current?.synthetic);
         el('researchRecordsHeading').textContent = labels.heading;
@@ -139,6 +159,9 @@ function mountResearch() {
         const allowed = {start: ['draft'], pause: ['queued', 'discovering', 'acquiring'], resume: ['paused'], cancel: ['draft', 'queued', 'discovering', 'acquiring', 'paused']};
         document.querySelectorAll('#research [data-research-action]').forEach(button => { button.disabled = busy || !allowed[button.dataset.researchAction].includes(state); });
         el('researchCreate').disabled = busy;
+        const eligible = current?.study_id === RESEARCH_SEMANTIC_STUDY && ['exhausted', 'target_reached', 'partial'].includes(state);
+        el('researchAnalyze').disabled = !eligible || analysisBusy || analysisStatus === 'processing' || analysisStatus === 'completed';
+        el('researchAnalysisRefresh').disabled = !eligible || analysisBusy;
     }
     function sourceChanged() {
         const source = el('researchSource').value;
@@ -159,11 +182,50 @@ function mountResearch() {
             sourceChanged();
         },
         busy(value) { busy = value; buttons(); },
-        clear() { current = null; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels(); buttons(); },
+        clear() { current = null; analysisStatus = null; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels();
+            el('researchAnalysisResults').replaceChildren(); el('researchAnalysisStatus').textContent = 'Selecciona la investigación para consultar su análisis.'; buttons(); },
+        analysisBusy(value) { analysisBusy = value; if (value) el('researchAnalysisStatus').textContent = 'Analizando comentarios… No cierres el servidor. Puedes consultar el resultado guardado al finalizar.'; buttons(); },
+        analysis(data) {
+            analysisStatus = data.status;
+            const container = el('researchAnalysisResults'); container.replaceChildren();
+            const states = {unavailable: 'No hay análisis disponible.', stale: 'El análisis anterior no corresponde al contenido actual. Puedes ejecutar uno nuevo.',
+                processing: 'Análisis en proceso. Consulta el análisis guardado en unos momentos; no se inicia otra solicitud.',
+                failed: 'No se pudo completar el análisis.', completed: 'Análisis automático guardado. Las categorías son propuestas sin validación humana.'};
+            el('researchAnalysisStatus').textContent = data.message || data.failure?.message || states[data.status] || 'Estado de análisis desconocido.';
+            buttons();
+            if (data.status !== 'completed' || !data.result) return;
+            const result = data.result;
+            const categories = {technical_question: 'Dudas técnicas', commercial_request: 'Solicitudes comerciales', social_opinion: 'Opiniones sociales', insufficient_context: 'Contexto insuficiente'};
+            container.append(make('p', `${data.embedding_model} · ${data.model} · ${data.generated_at}`));
+            container.append(make('p', `${result.comments.length} comentarios · ${result.ambiguous_count} ambiguos. Agrupación exploratoria por coseno, umbral ${data.grouping.threshold}; sin calibración manual.`));
+            (result.validation_warnings || []).forEach(warning => container.append(make('p', warning)));
+            const counts = make('ul');
+            Object.entries(result.category_counts).forEach(([key, count]) => counts.append(make('li', `${categories[key] || key}: ${count}`)));
+            container.append(make('h4', 'Categorías propuestas'), counts);
+            const lookup = new Map(result.comments.map(comment => [comment.record_key, comment]));
+            function evidence(keys) {
+                const details = make('details'); details.append(make('summary', `Ver ${keys.length} comentarios de respaldo`));
+                keys.forEach(key => {
+                    const comment = lookup.get(key); if (!comment) return;
+                    details.append(make('p', `${key.slice(0, 8)} · ${categories[comment.category]} · ${comment.publication_id}`),
+                        make('blockquote', comment.text), make('p', `Cita verificada: «${comment.quote}». ${comment.reason}${comment.ambiguous ? ' · Ambiguo; alternativas: ' + comment.alternatives.map(c => categories[c]).join(', ') : ''}`));
+                });
+                return details;
+            }
+            container.append(evidence(result.comments.map(c => c.record_key)), make('h4', 'Grupos por similitud semántica'));
+            result.groups.forEach(group => container.append(make('p', `${group.title} · ${group.count} comentarios · ${group.publication_count} publicaciones`), evidence(group.record_keys)));
+            container.append(make('h4', 'Necesidades, preguntas frecuentes y temas'));
+            const kinds = {need: 'Necesidad', faq: 'Pregunta frecuente', theme: 'Tema'};
+            if (!result.findings.length) container.append(make('p', 'No se obtuvieron hallazgos respaldados.'));
+            result.findings.forEach(finding => container.append(make('p', `${kinds[finding.kind]}: ${finding.title} · ${finding.count} comentarios · ${finding.publication_count} publicaciones`), evidence(finding.record_keys)));
+            container.append(make('h4', 'Recomendaciones de aprendizaje'), make('p', 'Se han verificado las citas de respaldo, no la eficacia pedagógica. Las actividades requieren revisión educativa; no hay enlaces, cursos ni certificaciones verificados.'));
+            if (!result.recommendations.length) container.append(make('p', 'No se generaron recomendaciones con respaldo suficiente.'));
+            result.recommendations.forEach(item => container.append(make('p', item.activity + ' · Pendiente de revisión educativa'), evidence(item.record_keys)));
+        },
         list(data, selected) {
             const placeholder = make('option', 'Selecciona una investigación'); placeholder.value = '';
             const select = el('researchSelect'); select.replaceChildren(placeholder);
-            data.studies.forEach(study => { const option = make('option', `${study.topic} · ${labels[study.status]}`); option.value = study.study_id; select.append(option); });
+            data.studies.forEach(study => { const option = make('option', `${study.topic} · ${labels[study.status]} · ${study.study_id.slice(0, 8)}`); option.value = study.study_id; select.append(option); });
             select.value = selected || ''; select.disabled = !data.studies.length;
             el('researchListPrevious').disabled = !data.offset;
             el('researchListNext').disabled = data.offset + data.limit >= data.total;
@@ -198,6 +260,8 @@ function mountResearch() {
         },
     };
     const workspace = new ResearchWorkspace(researchRequest, view);
+    el('researchAnalyze').addEventListener('click', () => workspace.analysis(true));
+    el('researchAnalysisRefresh').addEventListener('click', () => workspace.analysis());
     el('researchForm').addEventListener('submit', event => {
         event.preventDefault();
         workspace.create({topic: el('researchTopic').value, description: el('researchDescription').value,

@@ -889,3 +889,6 @@ select { padding: 10px; margin: 8px; border: 1px solid #cedde2; border-radius: 8
     #socialmind .sm-selector { padding: 18px; }
     #socialmind .sm-relations td, #socialmind .sm-relations th { padding: 12px 4px; }
 }
+#researchAnalysisResults { overflow-wrap: anywhere; }
+#researchAnalysisResults details { margin: 10px 0; }
+#researchAnalysisResults blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid #238e96; background: #f5fafa; }

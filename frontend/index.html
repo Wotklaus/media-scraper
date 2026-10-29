@@ -288,6 +288,16 @@
                     <p id="researchRecordsCount"></p><div class="research-table-scroll"><table><thead><tr><th id="researchPublicationHeader">Publicación</th><th>Texto preparado</th><th>Transformaciones</th></tr></thead><tbody id="researchRows"></tbody></table></div>
                     <div class="research-actions"><button id="researchRecordsPrevious" type="button" class="export-button" disabled>Registros anteriores</button><button id="researchRecordsNext" type="button" class="export-button" disabled>Registros siguientes</button></div>
                 </article>
+                <article class="card" aria-labelledby="researchAnalysisHeading">
+                    <h3 id="researchAnalysisHeading">Inteligencia semántica · MVP</h3>
+                    <p>Disponible para la investigación de cable UTP de 37 comentarios. El análisis envía los textos preparados a OpenAI y puede generar un costo. No realiza nuevas búsquedas.</p>
+                    <div class="research-actions">
+                        <button type="button" id="researchAnalyze" class="export-button" disabled>Analizar 37 comentarios</button>
+                        <button type="button" id="researchAnalysisRefresh" class="export-button" disabled>Consultar análisis guardado</button>
+                    </div>
+                    <p id="researchAnalysisStatus" role="status" aria-live="polite">Selecciona la investigación para consultar su análisis.</p>
+                    <div id="researchAnalysisResults"></div>
+                </article>
             </div>
         </section>
     </main>

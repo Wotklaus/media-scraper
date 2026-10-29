@@ -99,3 +99,25 @@ def tasks(study_id: UUID, offset: int = Query(0, ge=0, le=1000000), limit: int =
 def publications(study_id: UUID, offset: int = Query(0, ge=0, le=1000000), limit: int = Query(50, ge=1, le=100),
                  repository: ResearchRepository = Depends(research_repository)):
     return repository.publication_page(str(study_id), offset, limit)
+
+
+def research_analysis_request(study_id, repository, generate=False):
+    from .research_analysis import ResearchAnalysis
+    from .analysis_errors import AnalysisFailure
+    try:
+        service = ResearchAnalysis(repository.database)
+        return service.generate(str(study_id)) if generate else service.latest(str(study_id))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
+    except AnalysisFailure as error:
+        raise HTTPException(error.status_code, error.public()) from None
+
+
+@router.get('/studies/{study_id}/analysis')
+def stored_research_analysis(study_id: UUID, repository: ResearchRepository = Depends(research_repository)):
+    return research_analysis_request(study_id, repository)
+
+
+@router.post('/studies/{study_id}/analysis')
+def generate_research_analysis(study_id: UUID, repository: ResearchRepository = Depends(research_repository)):
+    return research_analysis_request(study_id, repository, generate=True)
