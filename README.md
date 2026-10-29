@@ -2,6 +2,9 @@
 
 # 🧠 Media Scraper
 
+**Nuevo módulo:** [Benford — Análisis Estadístico](docs/benford.md), análisis
+exploratorio de métricas almacenadas, sin nuevas extracciones ni consumo de IA.
+
 ### Social Media Analytics · TikTok Intelligence & Semantic Analytics
 
 **Plataforma web para extracción, normalización, persistencia, análisis estadístico y exploración semántica de publicaciones públicas de TikTok.**

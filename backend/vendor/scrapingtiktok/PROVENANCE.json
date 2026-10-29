@@ -1,0 +1,737 @@
+{
+  "repository": "https://github.com/Jccasav14/SCRAPINGTIKTOK",
+  "commit": "7deb6d0189f8b05d2f4e7d4ea7292b616258c205",
+  "source": "tiktok_scraper.py",
+  "license": "MIT",
+  "restored_media_scraper_commit": "15520737842a72361d423ec960bde6ebdebccf63",
+  "upstream_sha256": "b836bbc154b29a96abc491313ddb1409a1a5240be977c2dc37baef292459ad0a",
+  "integrated_sha256": "01c6c4a281dca0265cbd41509f7572cb349041ee956e926897648a4a7fd3a626",
+  "modified_line_ranges": [
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        17,
+        17
+      ],
+      "integrated_lines": [
+        17,
+        23
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        19,
+        19
+      ],
+      "integrated_lines": [
+        25,
+        25
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        42,
+        41
+      ],
+      "integrated_lines": [
+        48,
+        49
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        58,
+        58
+      ],
+      "integrated_lines": [
+        66,
+        69
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        60,
+        60
+      ],
+      "integrated_lines": [
+        71,
+        71
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        64,
+        93
+      ],
+      "integrated_lines": [
+        75,
+        76
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        118,
+        118
+      ],
+      "integrated_lines": [
+        101,
+        101
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        126,
+        126
+      ],
+      "integrated_lines": [
+        109,
+        109
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        129,
+        129
+      ],
+      "integrated_lines": [
+        112,
+        114
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        131,
+        131
+      ],
+      "integrated_lines": [
+        116,
+        122
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        138,
+        137
+      ],
+      "integrated_lines": [
+        129,
+        130
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        161,
+        160
+      ],
+      "integrated_lines": [
+        154,
+        155
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        170,
+        169
+      ],
+      "integrated_lines": [
+        165,
+        166
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        212,
+        211
+      ],
+      "integrated_lines": [
+        209,
+        209
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        215,
+        215
+      ],
+      "integrated_lines": [
+        213,
+        213
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        219,
+        219
+      ],
+      "integrated_lines": [
+        217,
+        217
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        226,
+        226
+      ],
+      "integrated_lines": [
+        224,
+        224
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        241,
+        241
+      ],
+      "integrated_lines": [
+        239,
+        239
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        251,
+        251
+      ],
+      "integrated_lines": [
+        249,
+        249
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        258,
+        259
+      ],
+      "integrated_lines": [
+        256,
+        257
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        262,
+        261
+      ],
+      "integrated_lines": [
+        260,
+        260
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        264,
+        264
+      ],
+      "integrated_lines": [
+        263,
+        263
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        294,
+        293
+      ],
+      "integrated_lines": [
+        293,
+        294
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        295,
+        295
+      ],
+      "integrated_lines": [
+        296,
+        296
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        299,
+        298
+      ],
+      "integrated_lines": [
+        300,
+        300
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        301,
+        301
+      ],
+      "integrated_lines": [
+        303,
+        303
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        331,
+        330
+      ],
+      "integrated_lines": [
+        333,
+        334
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        332,
+        332
+      ],
+      "integrated_lines": [
+        336,
+        336
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        338,
+        337
+      ],
+      "integrated_lines": [
+        342,
+        343
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        401,
+        401
+      ],
+      "integrated_lines": [
+        407,
+        411
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        404,
+        403
+      ],
+      "integrated_lines": [
+        414,
+        415
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        405,
+        405
+      ],
+      "integrated_lines": [
+        417,
+        417
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        409,
+        408
+      ],
+      "integrated_lines": [
+        421,
+        422
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        435,
+        435
+      ],
+      "integrated_lines": [
+        449,
+        449
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        441,
+        440
+      ],
+      "integrated_lines": [
+        455,
+        456
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        444,
+        443
+      ],
+      "integrated_lines": [
+        460,
+        461
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        446,
+        446
+      ],
+      "integrated_lines": [
+        464,
+        464
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        448,
+        448
+      ],
+      "integrated_lines": [
+        466,
+        466
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        453,
+        452
+      ],
+      "integrated_lines": [
+        471,
+        472
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        461,
+        462
+      ],
+      "integrated_lines": [
+        481,
+        482
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        477,
+        476
+      ],
+      "integrated_lines": [
+        497,
+        498
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        478,
+        478
+      ],
+      "integrated_lines": [
+        500,
+        500
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        486,
+        486
+      ],
+      "integrated_lines": [
+        508,
+        508
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        492,
+        496
+      ],
+      "integrated_lines": [
+        514,
+        518
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        505,
+        504
+      ],
+      "integrated_lines": [
+        527,
+        528
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        506,
+        506
+      ],
+      "integrated_lines": [
+        530,
+        530
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        521,
+        521
+      ],
+      "integrated_lines": [
+        545,
+        548
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        525,
+        525
+      ],
+      "integrated_lines": [
+        552,
+        552
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        527,
+        527
+      ],
+      "integrated_lines": [
+        554,
+        554
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        534,
+        533
+      ],
+      "integrated_lines": [
+        561,
+        562
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        561,
+        560
+      ],
+      "integrated_lines": [
+        590,
+        591
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        562,
+        562
+      ],
+      "integrated_lines": [
+        593,
+        593
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        570,
+        576
+      ],
+      "integrated_lines": [
+        601,
+        602
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        585,
+        585
+      ],
+      "integrated_lines": [
+        611,
+        613
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        587,
+        587
+      ],
+      "integrated_lines": [
+        615,
+        615
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        620,
+        620
+      ],
+      "integrated_lines": [
+        648,
+        650
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        622,
+        622
+      ],
+      "integrated_lines": [
+        652,
+        652
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        647,
+        646
+      ],
+      "integrated_lines": [
+        677,
+        678
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        648,
+        648
+      ],
+      "integrated_lines": [
+        680,
+        680
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        652,
+        652
+      ],
+      "integrated_lines": [
+        684,
+        684
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        656,
+        655
+      ],
+      "integrated_lines": [
+        688,
+        688
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        659,
+        659
+      ],
+      "integrated_lines": [
+        692,
+        701
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        661,
+        661
+      ],
+      "integrated_lines": [
+        703,
+        703
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        670,
+        671
+      ],
+      "integrated_lines": [
+        712,
+        713
+      ]
+    },
+    {
+      "operation": "replace",
+      "upstream_lines": [
+        678,
+        680
+      ],
+      "integrated_lines": [
+        720,
+        722
+      ]
+    },
+    {
+      "operation": "insert",
+      "upstream_lines": [
+        683,
+        682
+      ],
+      "integrated_lines": [
+        725,
+        726
+      ]
+    }
+  ]
+}

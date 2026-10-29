@@ -106,6 +106,10 @@ def normalize_profile(profile):
             "comments_status": "recovered" if comment_list else "not_recovered",
             "comments_complete": None,
         }
+        # Optional verified source metadata from the integrated original engine.
+        for key in ('created_at', 'author'):
+            if key in video:
+                publication[key] = deepcopy(video[key])
         publications.append(publication)
         for comment in comment_list:
             if (not isinstance(comment, dict)
@@ -138,6 +142,9 @@ def normalize_profile(profile):
         "retrieved_comments_count": len(comments),
         "publications_with_retrieved_comments": sum(bool(item["retrieved_comments_count"]) for item in publications),
     }
+    for key in ('engine', 'upstream_commit'):
+        if key in meta:
+            extraction_metadata[key] = meta[key]
     if "captured_at" in meta:
         extraction_metadata["captured_at"] = meta["captured_at"]
     return {
