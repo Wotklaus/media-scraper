@@ -43,7 +43,7 @@ class ContractsAndPrivacyTests(unittest.TestCase):
             self.assertEqual(StudyCreate(topic='x', target_records=target).target_records, target)
         for values in ({'topic': ' '}, {'topic': 'x', 'target_records': True},
                        {'topic': 'x', 'target_records': 0}, {'topic': 'x', 'target_records': 10001},
-                       {'topic': 'x', 'source': 'tiktok'}, {'topic': 'x', 'limits': {'batch_size': 101}},
+                       {'topic': 'x', 'source': 'unavailable-platform'}, {'topic': 'x', 'limits': {'batch_size': 101}},
                        {'topic': 'x', 'discipline': 'anything'}):
             with self.assertRaises(ValidationError):
                 StudyCreate(**values)
@@ -296,7 +296,7 @@ class EndpointTests(unittest.TestCase):
             status, capabilities = asyncio.run(request('GET', '/api/research/sources'))
             self.assertEqual(status, 200)
             self.assertTrue(capabilities['synthetic'])
-            for payload in ({'topic': ' '}, {'topic': 'x', 'target_records': 0}, {'topic': 'x', 'source': 'tiktok'}):
+            for payload in ({'topic': ' '}, {'topic': 'x', 'target_records': 0}, {'topic': 'x', 'source': 'unavailable-platform'}):
                 self.assertEqual(asyncio.run(request('POST', '/api/research/studies', body=json.dumps(payload).encode()))[0], 422)
             status, result = asyncio.run(request('POST', '/api/research/studies', body=json.dumps({'topic': '自由研究', 'target_records': 200}).encode()))
             self.assertEqual(status, 201)

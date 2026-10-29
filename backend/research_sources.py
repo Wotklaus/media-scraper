@@ -1,4 +1,4 @@
-"""Bounded connector contract and deterministic data with no external I/O."""
+"""Bounded acquisition contract, source registry and controlled synthetic source."""
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -17,6 +17,8 @@ class Page:
     cursor: str | None
     next_cursor: str | None
     items: list[dict]
+    truncated: bool = False
+    publication: dict | None = None
 
 
 class Connector(Protocol):
@@ -54,7 +56,9 @@ class SyntheticConnector:
 
 def connector_for(source):
     # Only this registry and the source contracts need extending for an authorised source.
-    factories = {'synthetic': SyntheticConnector}
+    from .research_youtube import YouTubeConnector
+    from .research_tiktok import TikTokConnector
+    factories = {'synthetic': SyntheticConnector, 'youtube': YouTubeConnector, 'tiktok': TikTokConnector}
     if source not in factories:
         raise SourceFailure('source_unavailable', False)
     return factories[source]()
@@ -73,3 +77,12 @@ def validate_page(page, task, limit, source='synthetic'):
                 or len(item['publication_id']) > 100
                 or task['kind'] == 'acquire' and item['publication_id'] != task['publication_id']):
             raise SourceFailure('invalid_provenance', False)
+
+
+def source_capabilities():
+    from .research_youtube import configured
+    return [dict(source='synthetic', source_label='Datos de prueba — No reales', synthetic=True, available=True),
+            dict(source='youtube', source_label='YouTube Data API v3', synthetic=False, available=configured(), replies=True,
+                 reason=None if configured() else 'Configura YOUTUBE_API_KEY en el servidor y trabajador.'),
+            dict(source='tiktok', source_label='TikTok · Playwright', synthetic=False, available=True,
+                 discovery=True, comments=True, reason=None)]

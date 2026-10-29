@@ -1503,3 +1503,15 @@ La integración del flujo completo: navegador automatizado, API, datos normaliza
 **Documento preparado para la implementación de `feature/setup-inicial` · Octubre de 2026**
 
 </div>
+
+### Investigación temática: YouTube (Fase 3)
+
+Adquisición mediante YouTube Data API v3, sin modificar el scraper TikTok.
+Requiere `YOUTUBE_API_KEY` en el entorno del servidor y trabajador.
+[Configuración, pruebas y primera adquisición autorizada](docs/youtube-acquisition.md).
+
+### TikTok temático mediante Playwright
+
+Adaptador integrado con el motor activo y checkpoints locales verificables.
+Seleccionable sin variables; la adquisición externa requiere habilitación en el trabajador.
+[Arquitectura, pruebas controladas y limitaciones](docs/tiktok-thematic.md).

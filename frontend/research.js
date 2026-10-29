@@ -26,7 +26,7 @@ class ResearchWorkspace {
             this.selected = null; this.unschedule(this.timer); this.view.clear();
         }
         this.offset = offset; this.view.list(data, this.selected);
-        this.view.message(data.total ? 'Selecciona una investigación. Datos de prueba — No reales.' : 'No hay investigaciones. Crea una con cualquier tema.');
+        this.view.message(data.total ? 'Selecciona una investigación y comprueba su fuente.' : 'No hay investigaciones. Crea una con cualquier tema.');
         if (this.selected) await this.select(this.selected);
     }
     async create(payload) {
@@ -98,26 +98,68 @@ async function researchRequest(path, options = {}) {
     } finally { clearTimeout(timer); }
 }
 
+function researchErrorMessage(code) {
+    const messages = {
+        source_structure_changed: 'No se reconocieron los resultados de TikTok. Revisa el diagnóstico del trabajador.',
+        source_load_timeout: 'TikTok no terminó de cargar los resultados dentro del tiempo permitido. Revisa el diagnóstico del trabajador.',
+        access_restricted: 'TikTok mostró una restricción de acceso. Revisa el diagnóstico del trabajador.',
+        browser_unavailable: 'El navegador no pudo iniciar o completar la carga. Revisa el diagnóstico del trabajador.',
+        checkpoint_changed: 'Los resultados cambiaron respecto al checkpoint. Revisa el diagnóstico del trabajador.',
+    };
+    return messages[code] || code || '—';
+}
+
+function researchRecordLabels(records, studySynthetic) {
+    const neutral = {heading: 'Registros preparados', publication: 'Publicación'};
+    if (!records.length) return neutral;
+    const provenance = records[0]?.synthetic;
+    if (typeof provenance !== 'boolean' || records.some(record => record?.synthetic !== provenance)
+        || (typeof studySynthetic === 'boolean' && studySynthetic !== provenance)) return neutral;
+    return provenance
+        ? {heading: 'Registros sintéticos · Datos de prueba — No reales', publication: 'Publicación sintética'}
+        : {heading: 'Registros recopilados', publication: 'Publicación'};
+}
+
 function mountResearch() {
     const el = id => document.getElementById(id);
     const make = (tag, text = '', className = '') => {
         const node = document.createElement(tag); node.textContent = text; node.className = className; return node;
     };
-    const labels = {draft: 'Creada · sin iniciar', queued: 'En cola · requiere trabajador', discovering: 'Descubriendo datos de prueba',
-        acquiring: 'Preparando registros de prueba', paused: 'Pausada', target_reached: 'Objetivo alcanzado',
-        exhausted: 'Fuente de prueba agotada', partial: 'Resultado parcial con fallos', failed: 'Procesamiento fallido', cancelled: 'Cancelada'};
+    const labels = {draft: 'Creada · sin iniciar', queued: 'En cola · requiere trabajador', discovering: 'Descubriendo publicaciones',
+        acquiring: 'Preparando registros', paused: 'Pausada', target_reached: 'Objetivo alcanzado',
+        exhausted: 'Recorrido disponible finalizado', partial: 'Resultado parcial con fallos', failed: 'Procesamiento fallido', cancelled: 'Cancelada'};
     let current = null, busy = false;
+    function recordLabels(records = []) {
+        const labels = researchRecordLabels(records, current?.synthetic);
+        el('researchRecordsHeading').textContent = labels.heading;
+        el('researchPublicationHeader').textContent = labels.publication;
+    }
     function buttons() {
         const state = current?.status;
         const allowed = {start: ['draft'], pause: ['queued', 'discovering', 'acquiring'], resume: ['paused'], cancel: ['draft', 'queued', 'discovering', 'acquiring', 'paused']};
         document.querySelectorAll('#research [data-research-action]').forEach(button => { button.disabled = busy || !allowed[button.dataset.researchAction].includes(state); });
         el('researchCreate').disabled = busy;
     }
+    function sourceChanged() {
+        const source = el('researchSource').value;
+        el('researchSyntheticConfig').hidden = source !== 'synthetic';
+        el('researchYouTubeConfig').hidden = source !== 'youtube';
+        el('researchTikTokConfig').hidden = source !== 'tiktok';
+        el('researchSourceLabel').textContent = source === 'youtube' ? 'YouTube Data API v3 · Datos reales al iniciar el trabajador' : source === 'tiktok' ? 'TikTok · Playwright · Adquisición externa sujeta a habilitación' : 'Datos de prueba — No reales';
+    }
+    el('researchSource').addEventListener('change', sourceChanged);
     const view = {
         message(text) { el('researchStatus').textContent = text; },
-        capabilities(data) { el('researchTarget').max = data.max_target_records; el('researchSourceLabel').textContent = data.source_label; },
+        capabilities(data) {
+            el('researchTarget').max = data.max_target_records;
+            el('researchSource').replaceChildren(...(data.sources || [{source: 'synthetic', source_label: data.source_label, available: true}]).map(source => {
+                const option = make('option', source.source_label + (source.reason ? ` · ${source.reason}` : ''));
+                option.value = source.source; option.disabled = !source.available; return option;
+            }));
+            sourceChanged();
+        },
         busy(value) { busy = value; buttons(); },
-        clear() { current = null; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); buttons(); },
+        clear() { current = null; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels(); buttons(); },
         list(data, selected) {
             const placeholder = make('option', 'Selecciona una investigación'); placeholder.value = '';
             const select = el('researchSelect'); select.replaceChildren(placeholder);
@@ -140,12 +182,13 @@ function mountResearch() {
                 ['Tareas pendientes', study.pending_tasks], ['Tareas fallidas', study.failed_tasks], ['Lotes guardados', c.batches],
                 ['Duración activa (s)', c.processing_seconds.toFixed(3)]];
             el('researchFacts').replaceChildren(...facts.map(([label, value]) => { const node = make('div', '', 'research-fact'); node.append(make('span', label), make('strong', value)); return node; }));
-            el('researchActivity').textContent = `Última actividad: ${study.updated_at} · Motivo: ${study.stop_reason || '—'} · Último error: ${study.last_error || '—'}`;
+            el('researchActivity').textContent = `Última actividad: ${study.updated_at} · Motivo: ${study.stop_reason || '—'} · Último error: ${study.source === 'tiktok' ? researchErrorMessage(study.last_error) : study.last_error || '—'}`;
             el('researchWarnings').replaceChildren(...study.warnings.map(warning => make('p', warning)));
-            this.message(`${labels[study.status]} · Datos de prueba — No reales. El progreso corresponde al objetivo, no a una plataforma externa.`);
+            this.message(`${labels[study.status]} · ${study.source_label}. ${study.source === 'tiktok' && study.last_error ? researchErrorMessage(study.last_error) + ' ' : ''}El progreso corresponde al objetivo, no a una plataforma externa.`);
             buttons();
         },
         records(data) {
+            recordLabels(data.records);
             el('researchRows').replaceChildren(...data.records.map(record => {
                 const row = make('tr'); row.append(make('td', record.publication_id), make('td', record.text), make('td', record.redactions)); return row;
             }));
@@ -158,9 +201,9 @@ function mountResearch() {
     el('researchForm').addEventListener('submit', event => {
         event.preventDefault();
         workspace.create({topic: el('researchTopic').value, description: el('researchDescription').value,
-            source: 'synthetic', target_records: Number(el('researchTarget').value),
+            source: el('researchSource').value, target_records: Number(el('researchTarget').value),
             limits: {batch_size: Number(el('researchBatch').value)},
-            source_config: {publications: Number(el('researchPublications').value), comments_per_publication: Number(el('researchComments').value),
+            source_config: el('researchSource').value === 'tiktok' ? {max_publications: Number(el('researchTikTokVideos').value), max_comments_per_publication: Number(el('researchTikTokComments').value), max_scrolls: Number(el('researchTikTokScrolls').value)} : el('researchSource').value === 'youtube' ? {max_publications: Number(el('researchYouTubeVideos').value), max_pages_per_publication: Number(el('researchYouTubePages').value), include_replies: el('researchReplies').checked, published_after: el('researchAfter').value ? el('researchAfter').value + 'T00:00:00Z' : null, published_before: el('researchBefore').value ? el('researchBefore').value + 'T00:00:00Z' : null} : {publications: Number(el('researchPublications').value), comments_per_publication: Number(el('researchComments').value),
                             failure_mode: el('researchFailure').value}});
     });
     el('researchSelect').addEventListener('change', event => workspace.select(event.target.value));
@@ -173,5 +216,5 @@ function mountResearch() {
     buttons(); return workspace;
 }
 
-if (typeof module !== 'undefined') module.exports = {ResearchWorkspace};
+if (typeof module !== 'undefined') module.exports = {researchErrorMessage, researchRecordLabels, ResearchWorkspace};
 if (typeof document !== 'undefined') window.research = mountResearch();

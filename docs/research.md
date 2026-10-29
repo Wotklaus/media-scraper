@@ -249,3 +249,15 @@ Son mediciones individuales del conector/doble, sujetas a variación; no estimac
 de rendimiento sobre Atlas, red, Chromium o TikTok. Posteriormente se validaron
 índices, conflictos, pérdida de conexión y expiración de reservas con MongoDB real
 en un replica set local desechable: [resultados y límites](mongodb-integration.md).
+
+## Fuentes de adquisición — Fase 3
+
+El conector YouTube y sus capacidades amplían la implementación sintética descrita
+arriba. Configuración, contratos, privacidad y piloto autorizado:
+[Adquisición YouTube](youtube-acquisition.md).
+
+## TikTok temático
+
+Se incorpora un adaptador Playwright seleccionable sin variables, con habilitación separada de adquisición externa.
+[Recorrido controlado, configuración y límites](tiktok-thematic.md). No se ha
+verificado adquisición en TikTok real.

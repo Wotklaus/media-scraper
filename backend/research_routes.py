@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from .database import get_database
 from .research_models import (StudyCreate, StudyResponse, StudyList, RecordList,
                               TaskList, PublicationList, ResearchCapabilities, maximum_target)
+from .research_sources import source_capabilities
 from .research_repository import ResearchRepository, ResearchMissing, ResearchConflict
 
 router = APIRouter(prefix='/api/research', tags=['Investigación Temática'])
@@ -35,11 +36,14 @@ def research_repository():
 
 @router.get('/sources', response_model=ResearchCapabilities)
 def sources():
-    return ResearchCapabilities(max_target_records=maximum_target())
+    return ResearchCapabilities(max_target_records=maximum_target(), sources=source_capabilities())
 
 
 @router.post('/studies', response_model=StudyResponse, status_code=201)
 def create_study(payload: StudyCreate, repository: ResearchRepository = Depends(research_repository)):
+    capability = next(source for source in source_capabilities() if source['source'] == payload.source)
+    if not capability['available']:
+        raise HTTPException(503, capability['reason'])
     return repository.create(payload)
 
 

@@ -61,10 +61,10 @@ class ResearchRepository:
     def create(self, request):
         self.ensure_indexes()
         now, identity = self.clock(), str(uuid4())
-        document = {'_id': identity, **request.model_dump(), 'synthetic': True,
-            'source_label': SOURCE_LABEL, 'status': 'draft', 'created_at': now,
+        document = {'_id': identity, **request.model_dump(), 'synthetic': request.source == 'synthetic',
+            'source_label': SOURCE_LABEL if request.source == 'synthetic' else ('YouTube Data API v3' if request.source == 'youtube' else 'TikTok · Playwright'), 'status': 'draft', 'created_at': now,
             'updated_at': now, 'last_error': None, 'stop_reason': None,
-            'warnings': [SOURCE_LABEL, 'Preparación de identificadores directos; no garantiza anonimización irreversible.'],
+            'warnings': [SOURCE_LABEL if request.source == 'synthetic' else 'Cobertura limitada por disponibilidad, cuotas y límites configurados; el objetivo no está garantizado.', 'Preparación de identificadores directos; no garantiza anonimización irreversible.'],
             'counters': Counters().model_dump(), 'budget_used_seconds': 0.0,
             'dedup_secret': token_hex(32), 'lease_owner': None, 'lease_until': EPOCH, 'next_run_at': now}
         task = self.task_document(identity, 'discover')
@@ -141,11 +141,32 @@ class ResearchRepository:
             raise LeaseLost('La reserva ya no está vigente.')
         return current
 
+    def next_task(self, study, session):
+        """TikTok drains durable work before asking a live search for another prefix."""
+        query = {'study_id': study['_id'], 'status': {'$in': ['queued', 'processing', 'retry_wait']}}
+        order = [('priority', 1), ('publication_id', 1), ('_id', 1)]
+        if study['source'] == 'tiktok':
+            pending = self.tasks.find_one({**query, 'pending.done': {'$in': [True, False]}},
+                                          sort=order, session=session)
+            if pending is not None:
+                return pending
+            acquisition = self.tasks.find_one({**query, 'kind': 'acquire'}, sort=order, session=session)
+            if acquisition is not None:
+                return acquisition
+        return self.tasks.find_one(query, sort=order if study['source'] == 'tiktok' else [('next_attempt_at', 1)], session=session)
+
     def claim_task(self, study):
         def claim(session):
             current = self.guard(study, session)
-            return self.tasks.find_one_and_update({'study_id': study['_id'],
-                'status': {'$in': ['queued', 'processing', 'retry_wait']}, 'next_attempt_at': {'$lte': self.clock()}},
+            query = {'study_id': study['_id'],
+                'status': {'$in': ['queued', 'processing', 'retry_wait']}, 'next_attempt_at': {'$lte': self.clock()}}
+            # Keep the existing scheduling for other providers.
+            if study['source'] == 'tiktok':
+                candidate = self.next_task(study, session)
+                if candidate is None:
+                    return None
+                query['_id'] = candidate['_id']
+            return self.tasks.find_one_and_update(query,
                 {'$set': {'status': 'processing', 'lease_owner': study['lease_owner'],
                           'lease_until': current['lease_until'], 'updated_at': self.clock()},
                 '$inc': {'attempts': 1}}, sort=[('priority', 1), ('publication_id', 1), ('_id', 1)],
@@ -160,6 +181,16 @@ class ResearchRepository:
             saved = self.tasks.find_one({'_id': task['_id'], 'lease_owner': study['lease_owner']}, session=session)
             if saved is None or saved['pending'] is not None:
                 raise LeaseLost('El lote ya tiene una confirmación pendiente.')
+            if page.publication is not None:
+                metadata = page.publication
+                if task['kind'] != 'acquire' or metadata.get('publication_id') != task['publication_id']:
+                    raise ResearchConflict('Metadatos de otra publicación.')
+                prepared_description = prepare_record({'record_id': 'description', 'publication_id': task['publication_id'],
+                    'text': metadata.get('description')}, study['_id'], current['dedup_secret'], max_length=10000)
+                self.publications.update_one({'study_id': study['_id'], 'publication_id': task['publication_id']},
+                    {'$set': {'description': prepared_description['text'] if prepared_description else 'Sin descripción disponible',
+                        'metrics': {key: value for key, value in metadata.get('metrics', {}).items()
+                            if key in ('views', 'likes', 'comments_count', 'shares', 'saves') and type(value) is int and value >= 0}}}, session=session)
             counts = {'received': 0, 'prepared': 0, 'duplicates': 0, 'excluded': 0, 'publications_discovered': 0}
             consumed = task['offset']
             for index, item in enumerate(page.items[task['offset']:], task['offset']):
@@ -169,11 +200,15 @@ class ResearchRepository:
                 if task['kind'] == 'discover':
                     identity = {'study_id': study['_id'], 'source': study['source'], 'publication_id': item['publication_id']}
                     description = prepare_record({'record_id': 'description', 'publication_id': item['publication_id'],
-                        'text': item.get('description')}, study['_id'], current['dedup_secret'])
+                        'text': item.get('description')}, study['_id'], current['dedup_secret'], max_length=10000)
                     metrics = item.get('metrics') if isinstance(item.get('metrics'), dict) else {}
                     result = self.publications.update_one(identity, {'$setOnInsert': {
                         **identity, 'synthetic': study['synthetic'],
                         'description': description['text'] if description else 'Sin descripción disponible',
+                        'title': (prepare_record({'record_id': 'title', 'publication_id': item['publication_id'], 'text': item.get('title')}, study['_id'], current['dedup_secret']) or {}).get('text', ''),
+                        'published_at': item.get('published_at'),
+                        'acquisition_version': item.get('acquisition_version', 'synthetic-v1'),
+                        **{key: item[key] for key in ('canonical_url', 'platform_id', 'author_handle') if key in item},
                         'metrics': {key: value for key, value in metrics.items()
                                     if key in ('views', 'likes', 'comments_count', 'shares', 'saves')
                                     and type(value) is int and value >= 0},
@@ -188,6 +223,8 @@ class ResearchRepository:
                         counts['excluded'] += 1
                         continue
                     prepared['synthetic'] = study['synthetic']
+                    prepared.update(source=study['source'], published_at=item.get('published_at'),
+                        record_kind=item.get('record_kind', 'comment'), acquisition_version=item.get('acquisition_version', 'synthetic-v1'))
                     identity = {'study_id': study['_id'], 'record_key': prepared['record_key']}
                     result = self.records.update_one(identity, {'$setOnInsert': {
                         '_id': str(uuid4()), **identity, **prepared, 'created_at': now}}, upsert=True, session=session)
@@ -197,14 +234,15 @@ class ResearchRepository:
             checkpoint = {'cursor': page.next_cursor if fully_consumed else page.cursor,
                           'offset': 0 if fully_consumed else consumed,
                           'done': fully_consumed and page.next_cursor is None or target,
-                          'source_complete': fully_consumed and page.next_cursor is None}
+                          'source_complete': fully_consumed and page.next_cursor is None and not page.truncated}
             self.tasks.update_one({'_id': task['_id'], 'lease_owner': study['lease_owner']},
                 {'$set': {'pending': checkpoint, 'updated_at': now}}, session=session)
             self.studies.update_one({'_id': study['_id']}, {'$inc': {
                 **{f'counters.{key}': value for key, value in counts.items()},
                 'counters.batches': 1}, '$set': {
                 'status': 'discovering' if task['kind'] == 'discover' else 'acquiring', 'updated_at': now}}, session=session)
-        self.transaction(stage)
+            return counts
+        return self.transaction(stage)
 
     def confirm_page(self, study, task):
         now = self.clock()
@@ -219,6 +257,9 @@ class ResearchRepository:
                 'status': 'completed' if pending['done'] else 'queued', 'last_checkpoint': now,
                 'updated_at': now, 'lease_owner': None, 'lease_until': EPOCH,
                 'failures': 0, 'last_error': None}}, session=session)
+            if current['source'] == 'tiktok':
+                self.studies.update_one({'_id': study['_id']},
+                    {'$set': {'last_error': None, 'stop_reason': None}}, session=session)
             if pending['done'] and task['kind'] == 'acquire':
                 self.publications.update_one({'study_id': study['_id'], 'publication_id': task['publication_id']},
                     {'$set': {'processed': True, 'source_complete': pending['source_complete']}}, session=session)
@@ -234,12 +275,14 @@ class ResearchRepository:
         def fail(session):
             self.guard(study, session)
             failures = task['failures'] + 1
-            retry = retryable and failures < study['limits']['max_attempts']
+            blocked = code in ('quota_exceeded', 'credentials_missing', 'provider_access_denied', 'source_permission_missing', 'access_restricted', 'checkpoint_changed', 'source_structure_changed')
+            retry = blocked or retryable and failures < study['limits']['max_attempts']
             self.tasks.update_one({'_id': task['_id'], 'lease_owner': study['lease_owner']},
                 {'$set': {'status': 'retry_wait' if retry else 'failed', 'last_error': code,
                     'failures': failures, 'updated_at': now, 'lease_until': EPOCH, 'lease_owner': None,
                     'next_attempt_at': now + timedelta(seconds=min(30, 2 ** failures))}}, session=session)
-            self.studies.update_one({'_id': study['_id']}, {'$set': {'last_error': code, 'updated_at': now}}, session=session)
+            self.studies.update_one({'_id': study['_id']}, {'$set': {'last_error': code, 'updated_at': now,
+                    **({'status': 'paused', 'stop_reason': code} if blocked else {})}}, session=session)
         self.transaction(fail)
 
     def release(self, study, elapsed=0.0):
@@ -251,8 +294,7 @@ class ResearchRepository:
                 return
             fields = {'lease_owner': None, 'lease_until': EPOCH, 'updated_at': now, 'next_run_at': now}
             if current['status'] in ACTIVE:
-                query = {'study_id': study['_id'], 'status': {'$in': ['queued', 'processing', 'retry_wait']}}
-                next_task = self.tasks.find_one(query, sort=[('next_attempt_at', 1)], session=session)
+                next_task = self.next_task(current, session)
                 if next_task is None:
                     failures = self.tasks.count_documents({'study_id': study['_id'], 'status': 'failed'}, session=session)
                     fields['status'] = ('partial' if current['counters']['prepared'] else 'failed') if failures else 'exhausted'
@@ -269,8 +311,8 @@ class ResearchRepository:
         self.raw_study(identity)
         fields = ('publication_id', 'text', 'synthetic', 'privacy_version', 'redactions', 'created_at')
         rows = self.records.find({'study_id': identity}).sort('_id', 1).skip(offset).limit(limit)
-        return {'records': [{'record_id': row['_id'], **{key: row[key] for key in fields}} for row in rows],
-                'total': self.records.count_documents({'study_id': identity}), 'offset': offset, 'limit': limit, 'source_label': SOURCE_LABEL}
+        return {'records': [{'record_id': row['_id'], **{key: row[key] for key in fields}, **{key: row[key] for key in ('source', 'published_at', 'record_kind', 'acquisition_version') if key in row}} for row in rows],
+                'total': self.records.count_documents({'study_id': identity}), 'offset': offset, 'limit': limit, 'source_label': self.raw_study(identity)['source_label']}
 
     def task_page(self, identity, offset=0, limit=50):
         self.raw_study(identity)

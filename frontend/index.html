@@ -236,7 +236,7 @@
         <section id="research" class="app-section hidden" hidden aria-label="Investigación Temática">
             <div class="welcome"><h2>Investigación Temática</h2>
                 <p id="researchSourceLabel">Datos de prueba — No reales</p>
-                <p>Valida investigaciones de cualquier tema con una fuente sintética. No se consulta TikTok ni OpenAI.</p></div>
+                <p>Investiga cualquier tema con la fuente seleccionada. YouTube requiere configuración; los datos de prueba son sintéticos. No se utiliza OpenAI.</p></div>
             <form id="researchForm" class="card research-controls">
                 <label>Tema libre<input id="researchTopic" required maxlength="500" placeholder="Escribe cualquier tema, sin categorías predefinidas"></label>
                 <label>Descripción opcional<textarea id="researchDescription" maxlength="2000" rows="2"></textarea></label>
@@ -244,10 +244,23 @@
                 <label>Registros preparados objetivo<input id="researchTarget" type="number" min="1" max="10000" step="1" value="400" list="researchTargets" required></label>
                 <datalist id="researchTargets"><option value="200"><option value="400"><option value="500"><option value="1000"></datalist>
                 <label>Tamaño del lote<input id="researchBatch" type="number" min="1" max="100" value="50" required></label>
-                <details><summary>Configurar la fuente de prueba</summary>
+                <details id="researchSyntheticConfig"><summary>Configurar la fuente de prueba</summary>
                     <label>Publicaciones sintéticas<input id="researchPublications" type="number" min="1" max="1000" value="20" required></label>
                     <label>Entradas por publicación<input id="researchComments" type="number" min="1" max="1000" value="80" required></label>
                     <label>Fallo controlado<select id="researchFailure"><option value="none">Ninguno</option><option value="transient">Transitorio en una publicación</option><option value="permanent">Permanente en una publicación</option></select></label>
+                </details>
+                <details id="researchYouTubeConfig" hidden><summary>Configurar YouTube</summary>
+                    <label>Máximo de videos<input id="researchYouTubeVideos" type="number" min="1" max="200" value="20"></label>
+                    <label>Máximo de páginas por video<input id="researchYouTubePages" type="number" min="1" max="200" value="20"></label>
+                    <label><input id="researchReplies" type="checkbox">Incluir respuestas (más solicitudes)</label>
+                    <label>Publicado desde<input id="researchAfter" type="date"></label>
+                    <label>Publicado antes<input id="researchBefore" type="date"></label>
+                </details>
+                <details id="researchTikTokConfig" hidden><summary>Configurar TikTok</summary>
+                    <label>Máximo de publicaciones<input id="researchTikTokVideos" type="number" min="1" max="200" value="50"></label>
+                    <label>Máximo de comentarios observados por publicación<input id="researchTikTokComments" type="number" min="1" max="2000" value="200"></label>
+                    <label>Máximo de desplazamientos de búsqueda<input id="researchTikTokScrolls" type="number" min="1" max="30" value="12"></label>
+                    <p>Sin garantía de cobertura. Se detiene ante CAPTCHA, autenticación o restricciones. Seleccionar y crear un estudio no ejecuta solicitudes. La adquisición externa requiere habilitación en el trabajador.</p>
                 </details>
                 <p>No incluyas datos personales en el tema o la descripción. La cantidad objetivo no garantiza disponibilidad.</p>
                 <button id="researchCreate" class="export-button" type="submit">Crear investigación</button>
@@ -271,8 +284,8 @@
                     <p>Procesamiento externo a la petición HTTP. Ejecuta el trabajador local para avanzar.</p>
                     <div id="researchFacts" class="research-facts"></div><p id="researchActivity"></p><div id="researchWarnings"></div>
                 </article>
-                <article class="card research-records"><h3>Registros preparados · Datos de prueba — No reales</h3>
-                    <p id="researchRecordsCount"></p><div class="research-table-scroll"><table><thead><tr><th>Publicación sintética</th><th>Texto preparado</th><th>Transformaciones</th></tr></thead><tbody id="researchRows"></tbody></table></div>
+                <article class="card research-records"><h3 id="researchRecordsHeading">Registros preparados</h3>
+                    <p id="researchRecordsCount"></p><div class="research-table-scroll"><table><thead><tr><th id="researchPublicationHeader">Publicación</th><th>Texto preparado</th><th>Transformaciones</th></tr></thead><tbody id="researchRows"></tbody></table></div>
                     <div class="research-actions"><button id="researchRecordsPrevious" type="button" class="export-button" disabled>Registros anteriores</button><button id="researchRecordsNext" type="button" class="export-button" disabled>Registros siguientes</button></div>
                 </article>
             </div>
