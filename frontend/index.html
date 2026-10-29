@@ -9,6 +9,7 @@
     <script src="script.js" defer></script>
     <script src="big-five.js" defer></script>
     <script src="socialmind.js?v=20261022-sm3" defer></script>
+    <script src="benford.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -34,6 +35,7 @@
         <button type="button" data-section="statistics">Estadísticas</button>
         <button type="button" data-section="big-five">Big Five</button>
         <button type="button" data-section="socialmind">SocialMind AI</button>
+        <button type="button" data-section="benford">Benford — Análisis Estadístico</button>
         </div>
     </nav>
     <main class="container content-width">
@@ -209,6 +211,25 @@
                 <p id="smStatus" role="status" aria-live="polite">Selecciona un perfil para consultar sus datos guardados.</p>
             </div>
             <div id="smResults" aria-live="polite"></div>
+        </section>
+        <section id="benford" class="app-section hidden" hidden aria-label="Benford — Análisis Estadístico">
+            <div class="welcome"><h2>Benford — Análisis Estadístico</h2>
+                <p>Explora el primer dígito significativo de una métrica por publicación, usando únicamente datos almacenados.</p></div>
+            <form id="benfordForm" class="card benford-controls">
+                <label>Perfil almacenado<select id="benfordProfile" disabled><option value="">Selecciona un perfil</option></select></label>
+                <label>Métrica<select id="benfordMetric">
+                    <option value="views">Visualizaciones</option><option value="likes">Me gusta</option>
+                    <option value="comments_count">Comentarios</option><option value="shares">Compartidos</option>
+                    <option value="saves">Guardados</option></select></label>
+                <label>Conjunto de datos<select id="benfordDataset">
+                    <option value="latest">Última extracción registrada</option>
+                    <option value="history">Historial · última observación por publicación</option></select></label>
+                <button id="benfordAnalyze" class="export-button" type="submit" disabled>Analizar distribución</button>
+                <button id="benfordRefresh" class="export-button" type="button">Actualizar perfiles</button>
+            </form>
+            <p id="benfordStatus" role="status" aria-live="polite">Selecciona un perfil para comenzar.</p>
+            <div id="benfordResults" hidden></div>
+            <p class="benford-disclaimer">Una desviación respecto de Benford no demuestra bots, fraude, compra de seguidores ni manipulación. Una distribución cercana tampoco demuestra autenticidad.</p>
         </section>
     </main>
 
