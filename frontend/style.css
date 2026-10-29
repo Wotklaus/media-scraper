@@ -6,6 +6,32 @@
     background: #f5f7fb;
 }
 
+/* Benford: reuse the existing card, button and navigation styles. */
+#benford .benford-controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: end; }
+#benford label { display: grid; gap: 8px; flex: 1 1 190px; font-size: 13px; }
+#benford select { width: 100%; min-width: 0; padding: 11px; border: 1px solid #ccd7e3; border-radius: 8px; background: white; color: inherit; font: inherit; }
+#benford .benford-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+#benford .benford-summary .card { display: grid; gap: 12px; }
+#benford .benford-summary span { font-size: 13px; color: #526b7a; }
+#benford .benford-summary strong { font-size: 24px; overflow-wrap: anywhere; }
+#benfordResults { display: grid; gap: 20px; }
+#benfordResults[hidden] { display: none; }
+#benford .benford-notes p, #benford .benford-disclaimer { line-height: 1.7; overflow-wrap: anywhere; }
+#benford .benford-warning { padding: 12px; border-left: 3px solid #a36f18; background: #fffaee; }
+#benford .benford-plot svg { display: block; width: 100%; height: auto; }
+#benford .benford-legend { font-size: 13px; color: #526b7a; }
+#benford .benford-table { overflow-x: auto; }
+#benford table { width: 100%; border-collapse: collapse; min-width: 540px; }
+#benford caption { text-align: left; font-weight: 600; padding-bottom: 18px; }
+#benford th, #benford td { text-align: right; padding: 12px 8px; border-bottom: 1px solid #e7ebf1; font-size: 13px; }
+#benford .benford-disclaimer { font-size: 13px; color: #526b7a; }
+@media (max-width: 900px) { #benford .benford-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 550px) {
+    #benford .benford-summary { grid-template-columns: 1fr; }
+    #benford .benford-controls label { flex-basis: 100%; }
+    #benford .benford-plot { padding: 12px; }
+}
+
 * {
     box-sizing: border-box;
 }

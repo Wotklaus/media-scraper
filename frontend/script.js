@@ -309,6 +309,9 @@ document.querySelectorAll('[data-section]').forEach((button) => {
         if (button.dataset.section === 'socialmind' && window.socialMind) {
             window.socialMind.open();
         }
+        if (button.dataset.section === 'benford' && window.benford) {
+            window.benford.open();
+        }
         activeSection = button.dataset.section;
         document.querySelectorAll('.app-section').forEach((section) => {
             const active = section.id === button.dataset.section;
