@@ -10,6 +10,7 @@
     <script src="big-five.js" defer></script>
     <script src="socialmind.js?v=20261022-sm3" defer></script>
     <script src="benford.js" defer></script>
+    <script src="research.js" defer></script>
 </head>
 <body>
 <div class="app">
@@ -36,6 +37,7 @@
         <button type="button" data-section="big-five">Big Five</button>
         <button type="button" data-section="socialmind">SocialMind AI</button>
         <button type="button" data-section="benford">Benford — Análisis Estadístico</button>
+        <button type="button" data-section="research">Investigación Temática</button>
         </div>
     </nav>
     <main class="container content-width">
@@ -230,6 +232,50 @@
             <p id="benfordStatus" role="status" aria-live="polite">Selecciona un perfil para comenzar.</p>
             <div id="benfordResults" hidden></div>
             <p class="benford-disclaimer">Una desviación respecto de Benford no demuestra bots, fraude, compra de seguidores ni manipulación. Una distribución cercana tampoco demuestra autenticidad.</p>
+        </section>
+        <section id="research" class="app-section hidden" hidden aria-label="Investigación Temática">
+            <div class="welcome"><h2>Investigación Temática</h2>
+                <p id="researchSourceLabel">Datos de prueba — No reales</p>
+                <p>Valida investigaciones de cualquier tema con una fuente sintética. No se consulta TikTok ni OpenAI.</p></div>
+            <form id="researchForm" class="card research-controls">
+                <label>Tema libre<input id="researchTopic" required maxlength="500" placeholder="Escribe cualquier tema, sin categorías predefinidas"></label>
+                <label>Descripción opcional<textarea id="researchDescription" maxlength="2000" rows="2"></textarea></label>
+                <label>Fuente<select id="researchSource"><option value="synthetic">Datos de prueba — No reales</option></select></label>
+                <label>Registros preparados objetivo<input id="researchTarget" type="number" min="1" max="10000" step="1" value="400" list="researchTargets" required></label>
+                <datalist id="researchTargets"><option value="200"><option value="400"><option value="500"><option value="1000"></datalist>
+                <label>Tamaño del lote<input id="researchBatch" type="number" min="1" max="100" value="50" required></label>
+                <details><summary>Configurar la fuente de prueba</summary>
+                    <label>Publicaciones sintéticas<input id="researchPublications" type="number" min="1" max="1000" value="20" required></label>
+                    <label>Entradas por publicación<input id="researchComments" type="number" min="1" max="1000" value="80" required></label>
+                    <label>Fallo controlado<select id="researchFailure"><option value="none">Ninguno</option><option value="transient">Transitorio en una publicación</option><option value="permanent">Permanente en una publicación</option></select></label>
+                </details>
+                <p>No incluyas datos personales en el tema o la descripción. La cantidad objetivo no garantiza disponibilidad.</p>
+                <button id="researchCreate" class="export-button" type="submit">Crear investigación</button>
+            </form>
+            <div class="card research-controls">
+                <label>Investigaciones guardadas<select id="researchSelect" disabled><option value="">Selecciona una investigación</option></select></label>
+                <div class="research-actions"><button id="researchRefresh" type="button" class="export-button">Actualizar</button>
+                    <button id="researchListPrevious" type="button" class="export-button" disabled>Anteriores</button>
+                    <button id="researchListNext" type="button" class="export-button" disabled>Siguientes</button></div>
+                <p id="researchListCount"></p>
+            </div>
+            <p id="researchStatus" role="status" aria-live="polite">Crea o selecciona una investigación.</p>
+            <div id="researchDetail" hidden>
+                <article class="card"><h3 id="researchHeading"></h3><p id="researchDescriptionText"></p>
+                    <p id="researchState"></p><label for="researchProgress">Avance respecto al objetivo</label>
+                    <progress id="researchProgress" value="0" max="400"></progress><p id="researchProgressText"></p>
+                    <div class="research-actions"><button type="button" class="export-button" data-research-action="start" disabled>Iniciar</button>
+                        <button type="button" class="export-button" data-research-action="pause" disabled>Pausar</button>
+                        <button type="button" class="export-button" data-research-action="resume" disabled>Reanudar</button>
+                        <button type="button" class="export-button" data-research-action="cancel" disabled>Cancelar</button></div>
+                    <p>Procesamiento externo a la petición HTTP. Ejecuta el trabajador local para avanzar.</p>
+                    <div id="researchFacts" class="research-facts"></div><p id="researchActivity"></p><div id="researchWarnings"></div>
+                </article>
+                <article class="card research-records"><h3>Registros preparados · Datos de prueba — No reales</h3>
+                    <p id="researchRecordsCount"></p><div class="research-table-scroll"><table><thead><tr><th>Publicación sintética</th><th>Texto preparado</th><th>Transformaciones</th></tr></thead><tbody id="researchRows"></tbody></table></div>
+                    <div class="research-actions"><button id="researchRecordsPrevious" type="button" class="export-button" disabled>Registros anteriores</button><button id="researchRecordsNext" type="button" class="export-button" disabled>Registros siguientes</button></div>
+                </article>
+            </div>
         </section>
     </main>
 

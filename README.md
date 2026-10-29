@@ -2,6 +2,10 @@
 
 # 🧠 Media Scraper
 
+**Investigación Temática (fase 1):** [núcleo, trabajador local y API](docs/research.md)
+para adquirir registros controlados por lotes. **Datos de prueba — No reales**;
+sin scraping temático ni consumo de OpenAI.
+
 **Nuevo módulo:** [Benford — Análisis Estadístico](docs/benford.md), análisis
 exploratorio de métricas almacenadas, sin nuevas extracciones ni consumo de IA.
 

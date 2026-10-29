@@ -1,5 +1,25 @@
 
 /* Global */
+/* Research uses the existing cards/navigation; every selector is locally scoped. */
+#research .research-controls { display: grid; gap: 14px; margin-bottom: 20px; }
+#research label { display: grid; gap: 7px; font-size: 13px; }
+#research input, #research textarea, #research select { width: 100%; min-width: 0; margin: 0; padding: 11px; border: 1px solid #ccd7e3; border-radius: 8px; font: inherit; background: white; color: inherit; }
+#research .research-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+#researchDetail { display: grid; gap: 20px; }
+#researchDetail[hidden] { display: none; }
+#research .research-facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 20px; }
+#research .research-fact { display: grid; gap: 8px; background: #f5f7fb; padding: 15px; border-radius: 8px; }
+#research .research-fact span { font-size: 13px; }
+#research .research-fact strong { font-size: 23px; }
+#research progress { width: 100%; height: 22px; accent-color: #196574; }
+#research p, #research h3 { overflow-wrap: anywhere; line-height: 1.6; }
+#research .research-table-scroll { overflow-x: auto; }
+#research table { width: 100%; border-collapse: collapse; }
+#research td, #research th { text-align: left; padding: 10px; border-bottom: 1px solid #e7ebf1; overflow-wrap: anywhere; }
+#research td:nth-child(2) { min-width: 180px; }
+#research details label { margin-top: 12px; }
+@media (max-width: 850px) { #research .research-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 450px) { #research .research-facts { grid-template-columns: 1fr; } }
 :root {
     font-family: Inter, Arial, sans-serif;
     color: #263247;
@@ -563,7 +583,7 @@ footer {
 :root { color: #18354a; background: #f5f8fa; }
 h1, h2, h3, h4 { color: #163449; }
 .main-nav { padding-block: 12px; background: #163449; }
-.nav-content { display: flex; gap: 8px; }
+.nav-content { display: flex; flex-wrap: wrap; gap: 8px; }
 .main-nav button { color: #e2edf1; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 12px 20px; }
 .main-nav button[aria-current="page"] { background: #265469; border-color: #48838b; color: white; }
 button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid #2c8b91; outline-offset: 3px; }

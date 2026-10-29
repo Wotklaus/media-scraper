@@ -303,6 +303,7 @@ downloadCSV.addEventListener("click", () => downloadResult("csv"));
 let activeSection = 'general';
 document.querySelectorAll('[data-section]').forEach((button) => {
     button.addEventListener('click', () => {
+        if (activeSection === 'research' && button.dataset.section !== 'research' && window.research) window.research.close();
         if (button.dataset.section === 'big-five' && window.bigFive) {
             window.bigFive.open(activeSection === 'general' ? currentProfile?.username : null);
         }
@@ -312,6 +313,7 @@ document.querySelectorAll('[data-section]').forEach((button) => {
         if (button.dataset.section === 'benford' && window.benford) {
             window.benford.open();
         }
+        if (button.dataset.section === 'research' && window.research) window.research.open();
         activeSection = button.dataset.section;
         document.querySelectorAll('.app-section').forEach((section) => {
             const active = section.id === button.dataset.section;

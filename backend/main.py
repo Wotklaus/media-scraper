@@ -15,12 +15,14 @@ from .embedding_routes import router as embedding_router
 from .stored_profiles import router as stored_profiles_router
 from .semantic_routes import router as semantic_router
 from .benford_routes import router as benford_router
+from .research_routes import router as research_router
 
 app = FastAPI(title="Media Scraper API")
 app.include_router(embedding_router)
 app.include_router(stored_profiles_router)
 app.include_router(semantic_router)
 app.include_router(benford_router)
+app.include_router(research_router)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
