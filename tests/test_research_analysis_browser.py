@@ -90,8 +90,9 @@ class ResearchAnalysisBrowserTests(unittest.TestCase):
                     state['saved'] = completed
                 route.fulfill(json=state['saved'])
             elif '/records?' in url:
-                route.fulfill(json={'records': [{'publication_id': 'fixture', 'text': 'Texto conservado', 'redactions': 0, 'synthetic': False}],
-                    'total': 37, 'offset': 0, 'limit': 25})
+                offset = int(url.split('offset=')[1].split('&')[0])
+                route.fulfill(json={'records': [{'publication_id': 'fixture', 'text': f'Texto página {offset}', 'redactions': 0, 'synthetic': False}],
+                    'total': 37, 'offset': offset, 'limit': 25})
             elif '/progress' in url:
                 route.fulfill(json={'study_id': STUDY, 'topic': 'cable utp', 'description': '', 'source': 'tiktok',
                     'synthetic': False, 'source_label': 'TikTok · Playwright', 'status': 'exhausted', 'target_records': 400,
@@ -113,12 +114,34 @@ class ResearchAnalysisBrowserTests(unittest.TestCase):
                 self.assertEqual(state['posts'], 0)
                 self.assertIn('No hay análisis', page.locator('#researchAnalysisStatus').text_content())
                 self.assertEqual(page.locator('#researchAnalyze').text_content(), 'Analizar 37 comentarios')
+                page.click('#researchExploreRecords')
+                self.assertTrue(page.locator('#researchEvidenceDialog').evaluate('(dialog) => dialog.open'))
+                self.assertIn('Texto página 0', page.locator('#researchDialogItems').text_content())
+                page.locator('#researchDialogSearch').fill('sin coincidencia')
+                self.assertIn('0 de 1', page.locator('#researchDialogCount').text_content())
+                page.locator('#researchDialogSearch').fill('')
+                page.click('#researchRecordsNext')
+                page.wait_for_function("document.querySelector('#researchDialogItems').textContent.includes('Texto página 25')")
+                page.click('#researchDialogClose')
+                self.assertFalse(page.locator('#researchEvidenceDialog').evaluate('(dialog) => dialog.open'))
+                page.click('#researchTabSemantic')
                 page.click('#researchAnalyze')
-                page.wait_for_function("document.querySelector('#researchAnalysisStatus').textContent.includes('guardado')")
+                page.wait_for_function("document.querySelector('#researchAnalysisResults').textContent.includes('Resumen analítico')")
                 text = page.locator('#researchAnalysisResults').text_content()
-                for expected in ('37 comentarios', 'Dudas técnicas: 2', 'Grupo de prueba', 'Pregunta respaldada',
-                                 'Comentario controlado 0', 'Pendiente de revisión educativa'):
+                for expected in ('37 comentarios', 'Dudas técnicas', 'Grupo de prueba', 'Pregunta respaldada',
+                                 'Pendiente de revisión educativa'):
                     self.assertIn(expected, text)
+                page.locator('#researchAnalysisResults').get_by_role('button', name='Ver 2 evidencias').first.click()
+                self.assertIn('Comentario controlado 0', page.locator('#researchDialogItems').text_content())
+                page.keyboard.press('Escape')
+                self.assertFalse(page.locator('#researchEvidenceDialog').evaluate('(dialog) => dialog.open'))
+                page.locator('#researchAnalysisResults').get_by_role('button', name='Ver 2 evidencias').first.click()
+                page.mouse.click(2, 2)
+                self.assertFalse(page.locator('#researchEvidenceDialog').evaluate('(dialog) => dialog.open'))
+                page.locator('#researchTabSemantic').focus()
+                page.keyboard.press('ArrowRight')
+                self.assertEqual(page.locator('#researchTabStatistics').get_attribute('aria-selected'), 'true')
+                page.click('#researchTabSemantic')
                 self.assertTrue(page.locator('#researchAnalyze').is_disabled())
                 page.click('#researchAnalysisRefresh')
                 self.assertEqual(state['posts'], 1)

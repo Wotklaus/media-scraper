@@ -144,10 +144,145 @@ function mountResearch() {
         acquiring: 'Preparando registros', paused: 'Pausada', target_reached: 'Objetivo alcanzado',
         exhausted: 'Recorrido disponible finalizado', partial: 'Resultado parcial con fallos', failed: 'Procesamiento fallido', cancelled: 'Cancelada'};
     let current = null, busy = false, analysisBusy = false, analysisStatus = null, analysisEligible = false;
+    let recordsPage = null, modalEntries = [], modalMode = null, modalTrigger = null, groupPage = 0;
+    const categoryNames = {technical_question: 'Dudas técnicas', general_question: 'Preguntas generales', commercial_request: 'Solicitudes comerciales', social_opinion: 'Opiniones sociales', insufficient_context: 'Contexto insuficiente'};
+    const svgPaths = {publication: 'M4 5h16v14H4z M8 9h8 M8 13h6', comment: 'M4 5h16v12H9l-5 3z M8 10h8', chart: 'M4 19V5 M8 16v-4 M13 16V8 M18 16V5', spark: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z'};
+    function icon(name) {
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true'); svg.classList.add('research-icon');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', svgPaths[name] || svgPaths.chart); path.setAttribute('fill', 'none'); path.setAttribute('stroke', 'currentColor');
+        path.setAttribute('stroke-width', '1.7'); path.setAttribute('stroke-linecap', 'round'); path.setAttribute('stroke-linejoin', 'round'); svg.append(path); return svg;
+    }
+    function metric(label, value, name, note = '') {
+        const card = make('div', '', 'research-metric'); const heading = make('span', '', 'research-metric-label');
+        heading.append(icon(name), document.createTextNode(label)); card.append(heading, make('strong', String(value)));
+        if (note) card.append(make('small', note)); return card;
+    }
+    function tab(name) {
+        document.querySelectorAll('#research [data-research-tab]').forEach(button => {
+            const selected = button.dataset.researchTab === name; button.setAttribute('aria-selected', String(selected));
+            el('researchPanel' + button.dataset.researchTab[0].toUpperCase() + button.dataset.researchTab.slice(1)).hidden = !selected;
+        });
+    }
     function recordLabels(records = []) {
         const labels = researchRecordLabels(records, current?.synthetic);
         el('researchRecordsHeading').textContent = labels.heading;
-        el('researchPublicationHeader').textContent = labels.publication;
+    }
+    function renderModal() {
+        const query = el('researchDialogSearch').value.trim().toLocaleLowerCase();
+        const visible = modalEntries.filter(entry => `${entry.text || ''} ${entry.publication_id || ''}`.toLocaleLowerCase().includes(query));
+        const root = el('researchDialogItems'); root.replaceChildren();
+        visible.forEach(entry => {
+            const card = make('article', '', 'research-evidence-card');
+            const heading = make('div', '', 'research-evidence-meta');
+            heading.append(make('strong', entry.publication_id || 'Publicación no disponible'),
+                make('span', `${entry.source || current?.source || 'Fuente no disponible'} · ${entry.synthetic === true ? 'Sintético' : entry.synthetic === false ? 'Recopilado' : 'Procedencia no disponible'}`));
+            card.append(heading, make('p', entry.text || 'Texto no disponible'));
+            if (entry.quote) card.append(make('blockquote', entry.quote), make('small', `Cita verificada · ${entry.reason || ''}`));
+            if (entry.ambiguous) card.append(make('small', `Clasificación ambigua${entry.alternatives?.length ? ' · alternativas: ' + entry.alternatives.map(item => categoryNames[item] || item).join(', ') : ''}`));
+            root.append(card);
+        });
+        if (!visible.length) root.append(make('p', 'No hay comentarios en esta vista para el filtro escrito.', 'research-muted'));
+        el('researchDialogCount').textContent = `${visible.length} de ${modalEntries.length} comentarios en esta vista${modalMode === 'records' ? ' · solo esta página' : ''}`;
+        el('researchRecordsPrevious').hidden = modalMode !== 'records'; el('researchRecordsNext').hidden = modalMode !== 'records';
+        if (modalMode === 'records' && recordsPage) {
+            el('researchRecordsPrevious').disabled = !recordsPage.offset;
+            el('researchRecordsNext').disabled = recordsPage.offset + recordsPage.limit >= recordsPage.total;
+        }
+    }
+    function showModal(title, entries, mode, trigger) {
+        modalMode = mode; modalEntries = entries; modalTrigger = trigger || document.activeElement;
+        el('researchDialogTitle').textContent = title;
+        el('researchDialogSummary').textContent = mode === 'records' ? 'Registros preparados · navegación paginada' : 'Evidencias del análisis guardado · citas vinculadas a comentarios del estudio';
+        el('researchDialogSearch').value = ''; renderModal();
+        const dialog = el('researchEvidenceDialog'); if (!dialog.open) dialog.showModal();
+        el('researchDialogSearch').focus();
+    }
+    function renderAnalysis(data) {
+        const result = data.result, root = el('researchAnalysisResults'); root.replaceChildren();
+        groupPage = 0;
+        const lookup = new Map(result.comments.map(comment => [comment.record_key, comment]));
+        const evidenceButton = (keys, title) => {
+            const button = make('button', `Ver ${keys.length} evidencias`, 'research-link-button'); button.type = 'button';
+            button.disabled = !keys.length;
+            button.addEventListener('click', () => showModal(title, keys.map(key => lookup.get(key)).filter(Boolean), 'evidence', button));
+            return button;
+        };
+        const overview = make('article', '', 'card research-dashboard-card');
+        overview.append(make('span', 'PANORAMA DEL ANÁLISIS', 'research-eyebrow'), make('h3', 'Resumen analítico'));
+        const summary = make('div', '', 'research-metric-grid');
+        summary.append(metric('Comentarios analizados', result.comments.length, 'comment'),
+            metric('Categorías presentes', Object.values(result.category_counts).filter(Boolean).length, 'chart'),
+            metric('Casos ambiguos', result.ambiguous_count, 'spark'),
+            metric('Grupos', result.groups.length, 'publication'),
+            metric('Hallazgos', result.findings.length, 'chart'),
+            metric('Cobertura del estudio', `${result.comments.length} / ${current?.counters?.prepared ?? data.comment_count ?? result.comments.length}`, 'comment', 'Analizados / preparados'));
+        overview.append(summary, make('p', `${data.embedding_model} · ${data.model} · ${data.generated_at} · agrupación exploratoria, coseno mínimo ${data.grouping?.threshold ?? 'no disponible'}. Las categorías no tienen validación humana.`, 'research-muted'));
+        (result.validation_warnings || []).forEach(warning => overview.append(make('p', warning, 'research-note-warning')));
+        root.append(overview);
+
+        const classification = make('article', '', 'card research-dashboard-card');
+        classification.append(make('span', 'CLASIFICACIÓN AUTOMÁTICA', 'research-eyebrow'), make('h3', 'Distribución de comentarios'),
+            make('p', 'Porcentajes calculados sobre los comentarios analizados; cada barra representa una categoría propuesta.', 'research-muted'));
+        const bars = make('div', '', 'research-bars');
+        Object.entries(result.category_counts).forEach(([key, count]) => {
+            const keys = result.comments.filter(comment => comment.category === key).map(comment => comment.record_key);
+            const row = make('div', '', 'research-bar-row'), head = make('div', '', 'research-bar-head');
+            const percent = result.comments.length ? Math.round(count / result.comments.length * 100) : 0;
+            head.append(make('strong', categoryNames[key] || key), make('span', `${count} · ${percent} %`));
+            const track = make('div', '', 'research-bar-track'), fill = make('span', '', 'research-bar-fill');
+            fill.style.width = `${percent}%`; track.append(fill); row.append(head, track, evidenceButton(keys, categoryNames[key] || key)); bars.append(row);
+        });
+        classification.append(bars); root.append(classification);
+
+        const groupsCard = make('article', '', 'card research-dashboard-card');
+        const groupHead = make('div', '', 'research-section-head');
+        const groupTitle = make('div'); groupTitle.append(make('span', 'EMBEDDINGS Y SIMILITUD', 'research-eyebrow'), make('h3', 'Grupos semánticos'));
+        groupHead.append(groupTitle, make('span', `${result.groups.filter(group => group.count > 1).length} grupos de varios comentarios · ${result.groups.filter(group => group.count === 1).length} individuales`, 'research-soft-badge'));
+        groupsCard.append(groupHead, make('p', 'Tamaños y similitud mínima de los integrantes de cada grupo. No se calculan coordenadas ni distancias entre grupos.', 'research-muted'));
+        const groupList = make('div', '', 'research-card-grid'), groupControls = make('div', '', 'research-pager');
+        const groupPageSize = window.matchMedia('(max-width: 560px)').matches ? 4 : 8;
+        function renderGroups() {
+            groupList.replaceChildren(); groupControls.replaceChildren();
+            result.groups.slice(groupPage * groupPageSize, groupPage * groupPageSize + groupPageSize).forEach(group => {
+                const card = make('div', '', 'research-small-card');
+                card.append(make('span', group.count > 1 ? 'GRUPO RELACIONADO' : 'CASO INDIVIDUAL', 'research-eyebrow'),
+                    make('h4', group.title), make('p', `${group.count} comentarios · ${group.publication_count} publicaciones`, 'research-muted'),
+                    make('p', group.minimum_similarity == null ? 'Sin similitud interna calculable' : `Coseno mínimo interno: ${Number(group.minimum_similarity).toFixed(2)}`, 'research-muted'),
+                    evidenceButton(group.record_keys, group.title)); groupList.append(card);
+            });
+            if (result.groups.length > groupPageSize) {
+                const previous = make('button', 'Anterior', 'research-link-button'); previous.type = 'button'; previous.disabled = groupPage === 0;
+                previous.addEventListener('click', () => { groupPage--; renderGroups(); });
+                const next = make('button', 'Siguiente', 'research-link-button'); next.type = 'button'; next.disabled = (groupPage + 1) * groupPageSize >= result.groups.length;
+                next.addEventListener('click', () => { groupPage++; renderGroups(); });
+                groupControls.append(previous, make('span', `Página ${groupPage + 1} de ${Math.ceil(result.groups.length / groupPageSize)}`), next);
+            }
+        }
+        renderGroups(); groupsCard.append(groupList, groupControls); root.append(groupsCard);
+
+        const findingsCard = make('article', '', 'card research-dashboard-card');
+        findingsCard.append(make('span', 'NECESIDADES Y PATRONES', 'research-eyebrow'), make('h3', 'Hallazgos exploratorios'),
+            make('p', 'Respaldados por comentarios observados; no representan a toda la población.', 'research-muted'));
+        const findings = make('div', '', 'research-card-grid');
+        const kinds = {need: 'Necesidad educativa', faq: 'Pregunta frecuente', theme: 'Tema o tendencia'};
+        result.findings.forEach(item => { const card = make('div', '', 'research-small-card');
+            card.append(make('span', kinds[item.kind] || item.kind, 'research-eyebrow'), make('h4', item.title),
+                make('p', `${item.count} comentarios · ${item.publication_count} publicaciones`, 'research-muted'), evidenceButton(item.record_keys, item.title)); findings.append(card); });
+        if (!result.findings.length) findings.append(make('p', 'No se encontraron hallazgos con respaldo suficiente.', 'research-muted'));
+        findingsCard.append(findings); root.append(findingsCard);
+
+        const recCard = make('article', '', 'card research-dashboard-card');
+        recCard.append(make('span', 'SIGUIENTES PASOS', 'research-eyebrow'), make('h3', 'Recomendaciones de aprendizaje'),
+            make('p', 'Solo hay actividades propuestas. No existen artículos, cursos o certificaciones verificados para este estudio.', 'research-muted'));
+        const recs = make('div', '', 'research-card-grid');
+        result.recommendations.forEach(item => { const card = make('div', '', 'research-small-card research-recommendation');
+            const heading = make('span', 'ACTIVIDAD DE APRENDIZAJE', 'research-eyebrow'); heading.prepend(icon('spark'));
+            card.append(heading, make('h4', item.activity), make('p', 'Pendiente de revisión educativa', 'research-review'),
+                make('p', `${item.count} comentarios de respaldo`, 'research-muted'), evidenceButton(item.record_keys, item.activity)); recs.append(card); });
+        if (!result.recommendations.length) recs.append(make('p', 'No hay actividades con respaldo suficiente.', 'research-muted'));
+        recCard.append(recs); root.append(recCard);
     }
     function buttons() {
         const state = current?.status;
@@ -163,7 +298,7 @@ function mountResearch() {
         el('researchSyntheticConfig').hidden = source !== 'synthetic';
         el('researchYouTubeConfig').hidden = source !== 'youtube';
         el('researchTikTokConfig').hidden = source !== 'tiktok';
-        el('researchSourceLabel').textContent = source === 'youtube' ? 'YouTube Data API v3 · Datos reales al iniciar el trabajador' : source === 'tiktok' ? 'TikTok · Playwright · Adquisición externa sujeta a habilitación' : 'Datos de prueba — No reales';
+        if (!current) el('researchSourceLabel').textContent = source === 'youtube' ? 'YouTube Data API v3 · Datos reales al iniciar el trabajador' : source === 'tiktok' ? 'TikTok · Playwright · Adquisición externa sujeta a habilitación' : 'Datos de prueba — No reales';
     }
     el('researchSource').addEventListener('change', sourceChanged);
     const view = {
@@ -177,7 +312,11 @@ function mountResearch() {
             sourceChanged();
         },
         busy(value) { busy = value; buttons(); },
-        clear() { current = null; analysisStatus = null; analysisEligible = false; el('researchDetail').hidden = true; el('researchRows').replaceChildren(); recordLabels();
+        clear() { current = null; recordsPage = null; analysisStatus = null; analysisEligible = false; el('researchDetail').hidden = true;
+            el('researchForm').hidden = false; el('researchNewStudy').textContent = 'Nueva investigación';
+            sourceChanged();
+            if (el('researchEvidenceDialog').open) el('researchEvidenceDialog').close(); modalMode = null; modalEntries = []; tab('acquisition'); recordLabels();
+            el('researchExploreRecords').disabled = true;
             el('researchAnalyze').textContent = 'Analizar comentarios';
             el('researchAnalysisIntro').textContent = 'Selecciona una investigación finalizada para consultar sus comentarios. El análisis envía los textos preparados a OpenAI y puede generar un costo. No realiza nuevas búsquedas.';
             el('researchAnalysisResults').replaceChildren(); el('researchAnalysisStatus').textContent = 'Selecciona la investigación para consultar su análisis.'; buttons(); },
@@ -189,40 +328,14 @@ function mountResearch() {
                 el('researchAnalyze').textContent = `Analizar ${data.comment_count} comentarios`;
                 el('researchAnalysisIntro').textContent = `${current?.topic || 'Investigación'} · ${data.comment_count} comentarios preparados para análisis. El análisis envía sus textos a OpenAI y puede generar un costo. No realiza nuevas búsquedas.`;
             }
-            const container = el('researchAnalysisResults'); container.replaceChildren();
+            el('researchAnalysisResults').replaceChildren();
             const states = {unavailable: 'No hay análisis disponible.', stale: 'El análisis anterior no corresponde al contenido actual. Puedes ejecutar uno nuevo.',
                 processing: 'Análisis en proceso. Consulta el análisis guardado en unos momentos; no se inicia otra solicitud.',
                 failed: 'No se pudo completar el análisis.', completed: 'Análisis automático guardado. Las categorías son propuestas sin validación humana.'};
             el('researchAnalysisStatus').textContent = data.message || data.failure?.message || states[data.status] || 'Estado de análisis desconocido.';
             buttons();
             if (data.status !== 'completed' || !data.result) return;
-            const result = data.result;
-            const categories = {technical_question: 'Dudas técnicas', general_question: 'Preguntas generales', commercial_request: 'Solicitudes comerciales', social_opinion: 'Opiniones sociales', insufficient_context: 'Contexto insuficiente'};
-            container.append(make('p', `${data.embedding_model} · ${data.model} · ${data.generated_at}`));
-            container.append(make('p', `${result.comments.length} comentarios · ${result.ambiguous_count} ambiguos. Agrupación exploratoria por coseno, umbral ${data.grouping.threshold}; sin calibración manual.`));
-            (result.validation_warnings || []).forEach(warning => container.append(make('p', warning)));
-            const counts = make('ul');
-            Object.entries(result.category_counts).forEach(([key, count]) => counts.append(make('li', `${categories[key] || key}: ${count}`)));
-            container.append(make('h4', 'Categorías propuestas'), counts);
-            const lookup = new Map(result.comments.map(comment => [comment.record_key, comment]));
-            function evidence(keys) {
-                const details = make('details'); details.append(make('summary', `Ver ${keys.length} comentarios de respaldo`));
-                keys.forEach(key => {
-                    const comment = lookup.get(key); if (!comment) return;
-                    details.append(make('p', `${key.slice(0, 8)} · ${categories[comment.category]} · ${comment.publication_id} · ${comment.source || 'fuente no disponible'}${comment.synthetic === true ? ' · Datos sintéticos' : ''}`),
-                        make('blockquote', comment.text), make('p', `Cita verificada: «${comment.quote}». ${comment.reason}${comment.ambiguous ? ' · Ambiguo; alternativas: ' + comment.alternatives.map(c => categories[c]).join(', ') : ''}`));
-                });
-                return details;
-            }
-            container.append(evidence(result.comments.map(c => c.record_key)), make('h4', 'Grupos por similitud semántica'));
-            result.groups.forEach(group => container.append(make('p', `${group.title} · ${group.count} comentarios · ${group.publication_count} publicaciones`), evidence(group.record_keys)));
-            container.append(make('h4', 'Necesidades, preguntas frecuentes, temas y tendencias'));
-            const kinds = {need: 'Necesidad', faq: 'Pregunta frecuente', theme: 'Tema o tendencia exploratoria'};
-            if (!result.findings.length) container.append(make('p', 'No se obtuvieron hallazgos respaldados.'));
-            result.findings.forEach(finding => container.append(make('p', `${kinds[finding.kind]}: ${finding.title} · ${finding.count} comentarios · ${finding.publication_count} publicaciones`), evidence(finding.record_keys)));
-            container.append(make('h4', 'Recomendaciones de aprendizaje'), make('p', 'Se han verificado las citas de respaldo, no la eficacia pedagógica. Las actividades requieren revisión educativa; no hay enlaces, cursos ni certificaciones verificados.'));
-            if (!result.recommendations.length) container.append(make('p', 'No se generaron recomendaciones con respaldo suficiente.'));
-            result.recommendations.forEach(item => container.append(make('p', item.activity + ' · Pendiente de revisión educativa'), evidence(item.record_keys)));
+            renderAnalysis(data);
         },
         list(data, selected) {
             const placeholder = make('option', 'Selecciona una investigación'); placeholder.value = '';
@@ -235,34 +348,65 @@ function mountResearch() {
         },
         study(study) {
             current = study; el('researchDetail').hidden = false;
+            el('researchForm').hidden = true; el('researchNewStudy').textContent = 'Nueva investigación';
+            const select = el('researchSelect');
+            if (![...select.options].some(option => option.value === study.study_id)) {
+                const option = make('option', `${study.topic} · ${study.study_id.slice(0, 8)}`); option.value = study.study_id; select.append(option);
+            }
+            select.value = study.study_id;
             el('researchHeading').textContent = study.topic;
+            el('researchSourceLabel').textContent = `${study.source_label} · ${study.synthetic === true ? 'Datos de prueba — No reales' : 'Registros recopilados'}`;
             el('researchAnalysisIntro').textContent = `${study.topic} · consultando comentarios preparados. El análisis envía sus textos a OpenAI y puede generar un costo. No realiza nuevas búsquedas.`;
             el('researchDescriptionText').textContent = study.description;
             el('researchState').textContent = labels[study.status] || study.status;
             el('researchProgress').value = study.counters.prepared; el('researchProgress').max = study.target_records;
             el('researchProgressText').textContent = `${study.counters.prepared} / ${study.target_records} preparados (${study.progress_percent} % del objetivo)`;
             const c = study.counters;
-            const facts = [['Preparados', c.prepared], ['Excluidos', c.excluded], ['Duplicados detectados', c.duplicates],
-                ['Recibidos', c.received], ['Publicaciones descubiertas', c.publications_discovered], ['Publicaciones procesadas', c.publications_processed],
-                ['Tareas pendientes', study.pending_tasks], ['Tareas fallidas', study.failed_tasks], ['Lotes guardados', c.batches],
-                ['Duración activa (s)', c.processing_seconds.toFixed(3)]];
-            el('researchFacts').replaceChildren(...facts.map(([label, value]) => { const node = make('div', '', 'research-fact'); node.append(make('span', label), make('strong', value)); return node; }));
+            el('researchFacts').replaceChildren(metric('Publicaciones descubiertas', c.publications_discovered, 'publication'),
+                metric('Publicaciones procesadas', c.publications_processed, 'publication'),
+                metric('Comentarios recibidos', c.received, 'comment'), metric('Comentarios preparados', c.prepared, 'comment'),
+                metric('Excluidos', c.excluded, 'chart'), metric('Duplicados', c.duplicates, 'chart'));
+            el('researchCoverage').textContent = c.received ? `${Math.round(c.prepared / c.received * 100)} % preparados de los recibidos` : 'Sin comentarios recibidos';
+            el('researchBenfordStatus').textContent = c.publications_processed < 110
+                ? `Análisis de Benford no aplicable: hay ${c.publications_processed} publicaciones procesadas. Una serie tan pequeña no permite frecuencias esperadas suficientes para los nueve primeros dígitos.`
+                : 'Análisis de Benford no aplicable: no se ha validado una serie cuantitativa apropiada para esta investigación. El módulo existente analiza perfiles V1 por username.';
             el('researchActivity').textContent = `Última actividad: ${study.updated_at} · Motivo: ${study.stop_reason || '—'} · Último error: ${study.source === 'tiktok' ? researchErrorMessage(study.last_error) : study.last_error || '—'}`;
             el('researchWarnings').replaceChildren(...study.warnings.map(warning => make('p', warning)));
             this.message(`${labels[study.status]} · ${study.source_label}. ${study.source === 'tiktok' && study.last_error ? researchErrorMessage(study.last_error) + ' ' : ''}El progreso corresponde al objetivo, no a una plataforma externa.`);
             buttons();
         },
         records(data) {
+            recordsPage = data;
             recordLabels(data.records);
-            el('researchRows').replaceChildren(...data.records.map(record => {
-                const row = make('tr'); row.append(make('td', record.publication_id), make('td', record.text), make('td', record.redactions)); return row;
-            }));
             el('researchRecordsCount').textContent = `${data.total} registros preparados · ${data.records.length ? data.offset + 1 : 0}–${data.offset + data.records.length}`;
-            el('researchRecordsPrevious').disabled = !data.offset;
-            el('researchRecordsNext').disabled = data.offset + data.limit >= data.total;
+            el('researchExploreRecords').disabled = !data.total;
+            if (modalMode === 'records' && el('researchEvidenceDialog').open) {
+                modalEntries = data.records; renderModal();
+            }
         },
     };
     const workspace = new ResearchWorkspace(researchRequest, view);
+    document.querySelectorAll('#research [data-research-tab]').forEach(button => {
+        button.addEventListener('click', () => tab(button.dataset.researchTab));
+        button.addEventListener('keydown', event => {
+            if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+            event.preventDefault(); const tabs = [...document.querySelectorAll('#research [data-research-tab]')];
+            const index = tabs.indexOf(button), next = tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+            tab(next.dataset.researchTab); next.focus();
+        });
+    });
+    el('researchExploreRecords').addEventListener('click', event => {
+        if (recordsPage) showModal('Comentarios preparados', recordsPage.records, 'records', event.currentTarget);
+    });
+    el('researchNewStudy').addEventListener('click', () => {
+        const form = el('researchForm'); form.hidden = !form.hidden;
+        el('researchNewStudy').textContent = form.hidden ? 'Nueva investigación' : 'Ocultar formulario';
+        if (!form.hidden) el('researchTopic').focus();
+    });
+    el('researchDialogSearch').addEventListener('input', renderModal);
+    el('researchDialogClose').addEventListener('click', () => el('researchEvidenceDialog').close());
+    el('researchEvidenceDialog').addEventListener('click', event => { if (event.target === el('researchEvidenceDialog')) el('researchEvidenceDialog').close(); });
+    el('researchEvidenceDialog').addEventListener('close', () => { if (modalTrigger?.isConnected) modalTrigger.focus(); });
     el('researchAnalyze').addEventListener('click', () => workspace.analysis(true));
     el('researchAnalysisRefresh').addEventListener('click', () => workspace.analysis());
     el('researchForm').addEventListener('submit', event => {

@@ -236,7 +236,7 @@
         <section id="research" class="app-section hidden" hidden aria-label="Investigación Temática">
             <div class="welcome"><h2>Investigación Temática</h2>
                 <p id="researchSourceLabel">Datos de prueba — No reales</p>
-                <p>Investiga cualquier tema con la fuente seleccionada. YouTube requiere configuración; los datos de prueba son sintéticos. No se utiliza OpenAI.</p></div>
+                <p>Adquisición y análisis semántico son procesos separados. El análisis bajo demanda puede utilizar OpenAI.</p></div>
             <form id="researchForm" class="card research-controls">
                 <label>Tema libre<input id="researchTopic" required maxlength="500" placeholder="Escribe cualquier tema, sin categorías predefinidas"></label>
                 <label>Descripción opcional<textarea id="researchDescription" maxlength="2000" rows="2"></textarea></label>
@@ -267,38 +267,39 @@
             </form>
             <div class="card research-controls">
                 <label>Investigaciones guardadas<select id="researchSelect" disabled><option value="">Selecciona una investigación</option></select></label>
-                <div class="research-actions"><button id="researchRefresh" type="button" class="export-button">Actualizar</button>
+                <div class="research-actions"><button id="researchNewStudy" type="button" class="export-button">Nueva investigación</button><button id="researchRefresh" type="button" class="export-button">Actualizar</button>
                     <button id="researchListPrevious" type="button" class="export-button" disabled>Anteriores</button>
                     <button id="researchListNext" type="button" class="export-button" disabled>Siguientes</button></div>
                 <p id="researchListCount"></p>
             </div>
             <p id="researchStatus" role="status" aria-live="polite">Crea o selecciona una investigación.</p>
             <div id="researchDetail" hidden>
-                <article class="card"><h3 id="researchHeading"></h3><p id="researchDescriptionText"></p>
-                    <p id="researchState"></p><label for="researchProgress">Avance respecto al objetivo</label>
-                    <progress id="researchProgress" value="0" max="400"></progress><p id="researchProgressText"></p>
-                    <div class="research-actions"><button type="button" class="export-button" data-research-action="start" disabled>Iniciar</button>
-                        <button type="button" class="export-button" data-research-action="pause" disabled>Pausar</button>
-                        <button type="button" class="export-button" data-research-action="resume" disabled>Reanudar</button>
-                        <button type="button" class="export-button" data-research-action="cancel" disabled>Cancelar</button></div>
-                    <p>Procesamiento externo a la petición HTTP. Ejecuta el trabajador local para avanzar.</p>
-                    <div id="researchFacts" class="research-facts"></div><p id="researchActivity"></p><div id="researchWarnings"></div>
-                </article>
-                <article class="card research-records"><h3 id="researchRecordsHeading">Registros preparados</h3>
-                    <p id="researchRecordsCount"></p><div class="research-table-scroll"><table><thead><tr><th id="researchPublicationHeader">Publicación</th><th>Texto preparado</th><th>Transformaciones</th></tr></thead><tbody id="researchRows"></tbody></table></div>
-                    <div class="research-actions"><button id="researchRecordsPrevious" type="button" class="export-button" disabled>Registros anteriores</button><button id="researchRecordsNext" type="button" class="export-button" disabled>Registros siguientes</button></div>
-                </article>
-                <article class="card" aria-labelledby="researchAnalysisHeading">
-                    <h3 id="researchAnalysisHeading">Inteligencia semántica · MVP</h3>
-                    <p id="researchAnalysisIntro">Selecciona una investigación finalizada para consultar sus comentarios. El análisis envía los textos preparados a OpenAI y puede generar un costo. No realiza nuevas búsquedas.</p>
-                    <div class="research-actions">
-                        <button type="button" id="researchAnalyze" class="export-button" disabled>Analizar comentarios</button>
-                        <button type="button" id="researchAnalysisRefresh" class="export-button" disabled>Consultar análisis guardado</button>
-                    </div>
-                    <p id="researchAnalysisStatus" role="status" aria-live="polite">Selecciona la investigación para consultar su análisis.</p>
+                <header class="card research-hero"><div><span class="research-eyebrow">ESTUDIO TEMÁTICO</span><h3 id="researchHeading"></h3><p id="researchDescriptionText"></p></div><span id="researchState" class="research-status-pill"></span></header>
+                <div class="research-tabs" role="tablist" aria-label="Vistas de la investigación">
+                    <button type="button" role="tab" id="researchTabAcquisition" aria-controls="researchPanelAcquisition" aria-selected="true" data-research-tab="acquisition">Adquisición</button>
+                    <button type="button" role="tab" id="researchTabSemantic" aria-controls="researchPanelSemantic" aria-selected="false" data-research-tab="semantic">Inteligencia semántica</button>
+                    <button type="button" role="tab" id="researchTabStatistics" aria-controls="researchPanelStatistics" aria-selected="false" data-research-tab="statistics">Estadística</button>
+                </div>
+                <div id="researchPanelAcquisition" role="tabpanel" aria-labelledby="researchTabAcquisition">
+                    <article class="card research-dashboard-card"><div class="research-section-head"><div><span class="research-eyebrow">CAPTURA Y PREPARACIÓN</span><h3>Estado de la investigación</h3></div><span id="researchCoverage" class="research-soft-badge"></span></div>
+                        <label for="researchProgress">Avance respecto al objetivo</label><progress id="researchProgress" value="0" max="400"></progress><p id="researchProgressText"></p>
+                        <div id="researchFacts" class="research-facts"></div>
+                        <div class="research-actions"><button type="button" class="export-button" data-research-action="start" disabled>Iniciar</button><button type="button" class="export-button" data-research-action="pause" disabled>Pausar</button><button type="button" class="export-button" data-research-action="resume" disabled>Reanudar</button><button type="button" class="export-button" data-research-action="cancel" disabled>Cancelar</button></div>
+                        <p id="researchActivity" class="research-muted"></p><div id="researchWarnings"></div>
+                    </article>
+                    <article class="card research-dashboard-card"><div class="research-section-head"><div><span class="research-eyebrow">REGISTROS</span><h3 id="researchRecordsHeading">Registros preparados</h3></div><button id="researchExploreRecords" type="button" class="export-button" disabled>Explorar comentarios</button></div><p id="researchRecordsCount" class="research-muted"></p><p class="research-muted">La exploración muestra 25 registros por página. La búsqueda filtra solo la página visible.</p></article>
+                </div>
+                <div id="researchPanelSemantic" role="tabpanel" aria-labelledby="researchTabSemantic" hidden>
+                    <article class="card research-dashboard-card"><div class="research-section-head"><div><span class="research-eyebrow">ANÁLISIS GUARDADO</span><h3 id="researchAnalysisHeading">Inteligencia semántica</h3></div><span class="research-soft-badge">Exploratorio</span></div>
+                        <p id="researchAnalysisIntro">Selecciona una investigación finalizada para consultar sus comentarios. El análisis envía los textos preparados a OpenAI y puede generar un costo. No realiza nuevas búsquedas.</p>
+                        <div class="research-actions"><button type="button" id="researchAnalyze" class="export-button" disabled>Analizar comentarios</button><button type="button" id="researchAnalysisRefresh" class="export-button" disabled>Consultar análisis guardado</button></div>
+                        <p id="researchAnalysisStatus" role="status" aria-live="polite">Selecciona la investigación para consultar su análisis.</p>
+                    </article>
                     <div id="researchAnalysisResults"></div>
-                </article>
+                </div>
+                <div id="researchPanelStatistics" role="tabpanel" aria-labelledby="researchTabStatistics" hidden><article class="card research-dashboard-card"><span class="research-eyebrow">PRIMER DÍGITO</span><h3>Análisis de Benford</h3><p id="researchBenfordStatus">Análisis de Benford no aplicable.</p><p class="research-muted">La conformidad o desviación con Benford no demuestra actividad orgánica, bots ni manipulación.</p></article></div>
             </div>
+            <dialog id="researchEvidenceDialog" aria-labelledby="researchDialogTitle"><div class="research-dialog-shell"><header class="research-dialog-head"><div><span class="research-eyebrow">EVIDENCIAS DEL ESTUDIO</span><h3 id="researchDialogTitle"></h3></div><button id="researchDialogClose" type="button" aria-label="Cerrar ventana de comentarios">×</button></header><p id="researchDialogSummary" class="research-muted"></p><label for="researchDialogSearch">Filtrar en esta vista<input id="researchDialogSearch" type="search" placeholder="Buscar en el texto o la publicación"></label><div id="researchDialogItems" class="research-dialog-items"></div><footer class="research-dialog-footer"><span id="researchDialogCount"></span><div class="research-actions"><button id="researchRecordsPrevious" type="button" class="export-button" disabled>Anterior</button><button id="researchRecordsNext" type="button" class="export-button" disabled>Siguiente</button></div></footer></div></dialog>
         </section>
     </main>
 
